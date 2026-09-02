@@ -1,6 +1,7 @@
 package com.mobilityos.location.service;
 
 import com.mobilityos.location.dto.LocationObservationRequest;
+import com.mobilityos.location.event.LocationEventPublisher;
 import com.mobilityos.location.live.LiveObservationResult;
 import com.mobilityos.location.live.VehicleLiveStateStore;
 import com.mobilityos.location.observation.LocationObservation;
@@ -20,10 +21,13 @@ public class LocationObservationIngestionService {
 
     private final VehicleLiveStateStore vehicleLiveStateStore;
 
+    private final LocationEventPublisher locationEventPublisher;
+
     public LocationObservationIngestionService(
             LocationObservationFactory observationFactory,
             LocationQualityPolicy locationQualityPolicy,
-            VehicleLiveStateStore vehicleLiveStateStore
+            VehicleLiveStateStore vehicleLiveStateStore,
+            LocationEventPublisher locationEventPublisher
     ) {
         this.observationFactory =
                 observationFactory;
@@ -33,6 +37,9 @@ public class LocationObservationIngestionService {
 
         this.vehicleLiveStateStore =
                 vehicleLiveStateStore;
+
+        this.locationEventPublisher =
+                locationEventPublisher;
     }
 
     public LocationObservationIngestionResult ingest(
@@ -52,12 +59,6 @@ public class LocationObservationIngestionService {
                                 receivedAt
                         );
 
-        /*
-         * Reject poor GPS before touching Redis.
-         *
-         * A bad observation must not advance the
-         * authoritative sequence number.
-         */
         if (!locationQualityPolicy.isAcceptable(
                 observation,
                 receivedAt
@@ -72,9 +73,31 @@ public class LocationObservationIngestionService {
                                 observation
                         );
 
+        if (shouldPublish(liveResult)) {
+            locationEventPublisher.publish(
+                    observation
+            );
+        }
+
         return map(
                 liveResult
         );
+    }
+
+    private boolean shouldPublish(
+            LiveObservationResult result
+    ) {
+        return switch (result) {
+
+            case APPLIED,
+                 DUPLICATE_CURRENT,
+                 STALE_SEQUENCE -> true;
+
+            case NO_ACTIVE_SESSION,
+                 SESSION_MISMATCH,
+                 USER_MISMATCH,
+                 DEVICE_MISMATCH -> false;
+        };
     }
 
     private LocationObservationIngestionResult map(

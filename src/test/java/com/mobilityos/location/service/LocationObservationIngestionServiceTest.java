@@ -1,6 +1,7 @@
 package com.mobilityos.location.service;
 
 import com.mobilityos.location.dto.LocationObservationRequest;
+import com.mobilityos.location.event.LocationEventPublisher;
 import com.mobilityos.location.live.LiveObservationResult;
 import com.mobilityos.location.live.VehicleLiveStateStore;
 import com.mobilityos.location.observation.LocationObservation;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,6 +44,8 @@ class LocationObservationIngestionServiceTest {
 
     private VehicleLiveStateStore liveStateStore;
 
+    private LocationEventPublisher eventPublisher;
+
     private LocationObservationIngestionService service;
 
     @BeforeEach
@@ -52,16 +56,22 @@ class LocationObservationIngestionServiceTest {
                         VehicleLiveStateStore.class
                 );
 
+        eventPublisher =
+                mock(
+                        LocationEventPublisher.class
+                );
+
         service =
                 new LocationObservationIngestionService(
                         new LocationObservationFactory(),
                         new LocationQualityPolicy(),
-                        liveStateStore
+                        liveStateStore,
+                        eventPublisher
                 );
     }
 
     @Test
-    void acceptableObservationUsesServerIdentityAndUpdatesLiveState() {
+    void acceptableObservationUsesServerIdentityUpdatesLiveStateAndPublishes() {
 
         when(
                 liveStateStore.applyForLiveState(
@@ -126,10 +136,16 @@ class LocationObservationIngestionServiceTest {
                 847L,
                 observation.sequenceNumber()
         );
+
+        verify(
+                eventPublisher
+        ).publish(
+                same(observation)
+        );
     }
 
     @Test
-    void poorAccuracyDoesNotAdvanceLiveState() {
+    void poorAccuracyTouchesNeitherLiveStateNorPublisher() {
 
         LocationObservationRequest request =
                 new LocationObservationRequest(
@@ -158,12 +174,13 @@ class LocationObservationIngestionServiceTest {
         );
 
         verifyNoInteractions(
-                liveStateStore
+                liveStateStore,
+                eventPublisher
         );
     }
 
     @Test
-    void futurePhoneTimestampDoesNotAdvanceLiveState() {
+    void futurePhoneTimestampTouchesNeitherLiveStateNorPublisher() {
 
         LocationObservationRequest request =
                 new LocationObservationRequest(
@@ -195,12 +212,13 @@ class LocationObservationIngestionServiceTest {
         );
 
         verifyNoInteractions(
-                liveStateStore
+                liveStateStore,
+                eventPublisher
         );
     }
 
     @Test
-    void duplicateCurrentResultIsPreserved() {
+    void duplicateCurrentIsPublishedForRetrySafety() {
 
         when(
                 liveStateStore.applyForLiveState(
@@ -221,10 +239,16 @@ class LocationObservationIngestionServiceTest {
                 LocationObservationIngestionResult.DUPLICATE_CURRENT,
                 result
         );
+
+        verify(
+                eventPublisher
+        ).publish(
+                any(LocationObservation.class)
+        );
     }
 
     @Test
-    void staleSequenceResultIsPreserved() {
+    void staleSequenceIsPublishedForDurableHistory() {
 
         when(
                 liveStateStore.applyForLiveState(
@@ -245,10 +269,44 @@ class LocationObservationIngestionServiceTest {
                 LocationObservationIngestionResult.STALE_SEQUENCE,
                 result
         );
+
+        verify(
+                eventPublisher
+        ).publish(
+                any(LocationObservation.class)
+        );
     }
 
     @Test
-    void sessionMismatchResultIsPreserved() {
+    void noActiveSessionDoesNotPublish() {
+
+        when(
+                liveStateStore.applyForLiveState(
+                        any(LocationObservation.class)
+                )
+        ).thenReturn(
+                LiveObservationResult.NO_ACTIVE_SESSION
+        );
+
+        LocationObservationIngestionResult result =
+                service.ingest(
+                        USER_ID,
+                        VEHICLE_ID,
+                        validRequest()
+                );
+
+        assertEquals(
+                LocationObservationIngestionResult.NO_ACTIVE_SESSION,
+                result
+        );
+
+        verifyNoInteractions(
+                eventPublisher
+        );
+    }
+
+    @Test
+    void sessionMismatchDoesNotPublish() {
 
         when(
                 liveStateStore.applyForLiveState(
@@ -269,10 +327,42 @@ class LocationObservationIngestionServiceTest {
                 LocationObservationIngestionResult.SESSION_MISMATCH,
                 result
         );
+
+        verifyNoInteractions(
+                eventPublisher
+        );
     }
 
     @Test
-    void deviceMismatchResultIsPreserved() {
+    void userMismatchDoesNotPublish() {
+
+        when(
+                liveStateStore.applyForLiveState(
+                        any(LocationObservation.class)
+                )
+        ).thenReturn(
+                LiveObservationResult.USER_MISMATCH
+        );
+
+        LocationObservationIngestionResult result =
+                service.ingest(
+                        USER_ID,
+                        VEHICLE_ID,
+                        validRequest()
+                );
+
+        assertEquals(
+                LocationObservationIngestionResult.USER_MISMATCH,
+                result
+        );
+
+        verifyNoInteractions(
+                eventPublisher
+        );
+    }
+
+    @Test
+    void deviceMismatchDoesNotPublish() {
 
         when(
                 liveStateStore.applyForLiveState(
@@ -292,6 +382,132 @@ class LocationObservationIngestionServiceTest {
         assertEquals(
                 LocationObservationIngestionResult.DEVICE_MISMATCH,
                 result
+        );
+
+        verifyNoInteractions(
+                eventPublisher
+        );
+    }
+
+    @Test
+    void publisherFailurePropagatesSoClientCanRetry() {
+
+        when(
+                liveStateStore.applyForLiveState(
+                        any(LocationObservation.class)
+                )
+        ).thenReturn(
+                LiveObservationResult.APPLIED
+        );
+
+        doThrow(
+                new IllegalStateException(
+                        "stream unavailable"
+                )
+        ).when(
+                eventPublisher
+        ).publish(
+                any(LocationObservation.class)
+        );
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> service.ingest(
+                        USER_ID,
+                        VEHICLE_ID,
+                        validRequest()
+                )
+        );
+
+        verify(
+                eventPublisher
+        ).publish(
+                any(LocationObservation.class)
+        );
+    }
+
+    @Test
+    void retryAfterPublishFailurePublishesAgainWhenLiveStateReportsDuplicate() {
+
+        when(
+                liveStateStore.applyForLiveState(
+                        any(LocationObservation.class)
+                )
+        ).thenReturn(
+                LiveObservationResult.APPLIED,
+                LiveObservationResult.DUPLICATE_CURRENT
+        );
+
+        doThrow(
+                new IllegalStateException(
+                        "first publish failed"
+                )
+        )
+                .doNothing()
+                .when(
+                        eventPublisher
+                )
+                .publish(
+                        any(LocationObservation.class)
+                );
+
+        LocationObservationRequest request =
+                validRequest();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> service.ingest(
+                        USER_ID,
+                        VEHICLE_ID,
+                        request
+                )
+        );
+
+        LocationObservationIngestionResult retryResult =
+                service.ingest(
+                        USER_ID,
+                        VEHICLE_ID,
+                        request
+                );
+
+        assertEquals(
+                LocationObservationIngestionResult.DUPLICATE_CURRENT,
+                retryResult
+        );
+
+        ArgumentCaptor<LocationObservation> captor =
+                ArgumentCaptor.forClass(
+                        LocationObservation.class
+                );
+
+        verify(
+                eventPublisher,
+                times(2)
+        ).publish(
+                captor.capture()
+        );
+
+        List<LocationObservation> attempts =
+                captor.getAllValues();
+
+        assertEquals(
+                2,
+                attempts.size()
+        );
+
+        assertEquals(
+                OBSERVATION_ID,
+                attempts.get(0).observationId()
+        );
+
+        assertEquals(
+                OBSERVATION_ID,
+                attempts.get(1).observationId()
+        );
+
+        assertEquals(
+                attempts.get(0).observationId(),
+                attempts.get(1).observationId()
         );
     }
 

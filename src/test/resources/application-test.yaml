@@ -1,0 +1,17 @@
+spring:
+  docker:
+    compose:
+      enabled: false
+
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/mobilityos_test}
+    username: ${TEST_DB_USERNAME:mobilityos}
+    password: ${TEST_DB_PASSWORD:mobilityos_dev_password}
+
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6379}
+      database: ${TEST_REDIS_DATABASE:15}
+      repositories:
+        enabled: false
