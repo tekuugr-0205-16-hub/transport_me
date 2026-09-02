@@ -1,0 +1,813 @@
+com.mobilityos
+│
+├── common                               // Shared framework
+│   ├── annotation
+│   ├── auditing
+│   ├── config
+│   ├── constants
+│   ├── event
+│   │   ├── publisher
+│   │   ├── listener
+│   │   └── events
+│   ├── exception
+│   ├── mappermvn
+│   ├── pagination
+│   ├── response
+│   ├── specification
+│   ├── util
+│   ├── validation
+│   └── valueobject
+│
+├── auth                                // Authentication & Security
+│   ├── controller
+│   ├── dto
+│   ├── security
+│   │   ├── config
+│   │   ├── filter
+│   │   ├── handler
+│   │   ├── jwt
+│   │   └── provider
+│   ├── service
+│   └── event
+│
+├── identity                            // Users & Permissions
+│   ├── controller
+│   ├── dto
+│   ├── entity
+│   ├── mapper
+│   ├── permission
+│   ├── policy
+│   ├── repository
+│   ├── service
+│   ├── validator
+│   └── event
+│
+├── organization                        // Transport Operators (Tenant)
+│   ├── controller
+│   ├── dto
+│   ├── entity
+│   ├── mapper
+│   ├── policy
+│   ├── repository
+│   ├── service
+│   └── event
+│
+├── fleet                               // Fleet Management
+│   ├── assignment
+│   ├── driver
+│   ├── gps
+│   ├── inspection
+│   ├── maintenance
+│   ├── vehicle
+│   ├── controller
+│   ├── dto
+│   └── event
+│
+├── route                               // Route Management
+│   ├── controller
+│   ├── dto
+│   ├── entity
+│   ├── mapper
+│   ├── repository
+│   ├── routing
+│   ├── service
+│   └── event
+│
+├── location                            // GPS Processing
+│   ├── cache
+│   ├── geofence
+│   ├── history
+│   ├── ingestion
+│   ├── tracking
+│   ├── controller
+│   ├── dto
+│   ├── repository
+│   ├── service
+│   └── event
+│
+├── realtime                            // Live Communication
+│   ├── websocket
+│   ├── publisher
+│   ├── subscriber
+│   ├── session
+│   └── config
+│
+├── passenger
+│   ├── controller
+│   ├── dto
+│   ├── entity
+│   ├── history
+│   ├── preferences
+│   ├── recommendation
+│   ├── repository
+│   ├── service
+│   └── event
+│
+├── search
+│   ├── cache
+│   ├── eta
+│   ├── nearby
+│   ├── recommendation
+│   ├── routing
+│   ├── controller
+│   ├── dto
+│   ├── mapper
+│   └── service
+│
+├── subscription
+│   ├── billing
+│   ├── invoice
+│   ├── paymentstatus
+│   ├── controller
+│   ├── dto
+│   ├── entity
+│   ├── repository
+│   ├── service
+│   └── event
+│
+├── payment
+│   ├── controller
+│   ├── dto
+│   ├── entity
+│   ├── provider
+│   ├── repository
+│   ├── service
+│   ├── webhook
+│   └── event
+│
+├── notification
+│   ├── email
+│   ├── inapp
+│   ├── preference
+│   ├── push
+│   ├── sms
+│   ├── template
+│   ├── controller
+│   ├── dto
+│   ├── repository
+│   ├── service
+│   └── event
+│
+├── reporting
+│   ├── analytics
+│   ├── dashboard
+│   ├── export
+│   ├── controller
+│   ├── dto
+│   ├── repository
+│   └── service
+│
+├── ai
+│   ├── assistant
+│   ├── memory
+│   ├── model
+│   ├── prediction
+│   ├── prompt
+│   ├── provider
+│   ├── recommendation
+│   ├── vector
+│   ├── controller
+│   ├── dto
+│   └── service
+│
+├── integration
+│   ├── ai
+│   ├── government
+│   ├── gps
+│   ├── maps
+│   ├── mqtt
+│   ├── payment
+│   ├── sms
+│   └── webhook
+│
+├── file
+│   ├── controller
+│   ├── dto
+│   ├── entity
+│   ├── repository
+│   ├── service
+│   └── storage
+│
+├── audit
+│   ├── controller
+│   ├── entity
+│   ├── repository
+│   └── service
+│
+├── scheduler
+│   ├── cleanup
+│   ├── report
+│   ├── subscription
+│   └── synchronization
+│
+├── monitoring
+│   ├── health
+│   ├── logging
+│   ├── metrics
+│   └── tracing
+│
+├── mobility                            // Cross-domain orchestration
+│   ├── coordinator
+│   ├── facade
+│   ├── workflow
+│   └── service
+│
+├── admin
+│   ├── controller
+│   ├── dto
+│   ├── repository
+│   └── service
+│
+└── infrastructure                      // Technical Infrastructure
+    ├── cache
+    ├── database
+    ├── messaging
+    ├── multitenancy
+    ├── observability
+    ├── scheduler
+    ├── security
+    └── storage
+ com.mobilityos
+ │
+ ├── MobilityOsBackendApplication.java
+ │
+ ├── common
+ │   ├── annotation
+ │   │   ├── CurrentUser.java
+ │   │   ├── TenantScoped.java
+ │   │   └── RequirePermission.java
+ │   │
+ │   ├── auditing
+ │   │   ├── AuditableEntity.java
+ │   │   ├── AuditListener.java
+ │   │   └── AuditMetadata.java
+ │   │
+ │   ├── config
+ │   │   ├── AsyncConfig.java
+ │   │   ├── CorsConfig.java
+ │   │   ├── JacksonConfig.java
+ │   │   └── JpaConfig.java
+ │   │
+ │   ├── constants
+ │   │   ├── AppConstants.java
+ │   │   ├── CacheConstants.java
+ │   │   ├── HeaderConstants.java
+ │   │   └── SecurityConstants.java
+ │   │
+ │   ├── event
+ │   │   ├── publisher
+ │   │   │   └── DomainEventPublisher.java
+ │   │   ├── listener
+ │   │   │   └── DomainEventListener.java
+ │   │   └── events
+ │   │       ├── BaseDomainEvent.java
+ │   │       └── EntityCreatedEvent.java
+ │   │
+ │   ├── exception
+ │   │   ├── GlobalExceptionHandler.java
+ │   │   ├── BusinessException.java
+ │   │   ├── ForbiddenException.java
+ │   │   ├── ResourceNotFoundException.java
+ │   │   ├── UnauthorizedException.java
+ │   │   └── ValidationException.java
+ │   │
+ │   ├── mapper
+ │   │   └── BaseMapper.java
+ │   │
+ │   ├── pagination
+ │   │   ├── PageRequestDTO.java
+ │   │   ├── PageResponse.java
+ │   │   └── SortDirection.java
+ │   │
+ │   ├── response
+ │   │   ├── ApiError.java
+ │   │   ├── ApiResponse.java
+ │   │   └── ApiResponseFactory.java
+ │   │
+ │   ├── specification
+ │   │   └── BaseSpecification.java
+ │   │
+ │   ├── util
+ │   │   ├── DateTimeUtils.java
+ │   │   ├── JsonUtils.java
+ │   │   ├── SecurityUtils.java
+ │   │   └── StringUtils.java
+ │   │
+ │   ├── validation
+ │   │   ├── CoordinatesValidator.java
+ │   │   ├── EnumValidator.java
+ │   │   └── PhoneNumberValidator.java
+ │   │
+ │   └── valueobject
+ │       ├── Address.java
+ │       ├── Coordinates.java
+ │       └── PhoneNumber.java
+ │
+ ├── auth
+ │   ├── controller
+ │   │   └── AuthController.java
+ │   ├── dto
+ │   │   ├── LoginRequest.java
+ │   │   ├── RefreshTokenRequest.java
+ │   │   └── AuthTokenResponse.java
+ │   ├── security
+ │   │   ├── config
+ │   │   │   └── SecurityConfig.java
+ │   │   ├── filter
+ │   │   │   └── JwtAuthenticationFilter.java
+ │   │   ├── handler
+ │   │   │   ├── AuthenticationEntryPoint.java
+ │   │   │   └── AccessDeniedHandler.java
+ │   │   ├── jwt
+ │   │   │   ├── JwtService.java
+ │   │   │   └── JwtClaims.java
+ │   │   └── provider
+ │   │       └── AuthenticationProvider.java
+ │   ├── service
+ │   │   ├── AuthService.java
+ │   │   ├── TokenService.java
+ │   │   └── RefreshTokenService.java
+ │   └── event
+ │       ├── LoginEvent.java
+ │       └── LogoutEvent.java
+ │
+ ├── identity
+ │   ├── controller
+ │   │   ├── UserController.java
+ │   │   └── PermissionController.java
+ │   ├── dto
+ │   │   ├── UserCreateRequest.java
+ │   │   ├── UserUpdateRequest.java
+ │   │   └── UserResponse.java
+ │   ├── entity
+ │   │   ├── User.java
+ │   │   ├── Role.java
+ │   │   └── Permission.java
+ │   ├── mapper
+ │   │   └── UserMapper.java
+ │   ├── permission
+ │   │   ├── PermissionService.java
+ │   │   └── PermissionEvaluator.java
+ │   ├── policy
+ │   │   ├── UserPolicy.java
+ │   │   └── OrganizationAccessPolicy.java
+ │   ├── repository
+ │   │   ├── UserRepository.java
+ │   │   ├── RoleRepository.java
+ │   │   └── PermissionRepository.java
+ │   ├── service
+ │   │   ├── UserService.java
+ │   │   └── RoleService.java
+ │   ├── validator
+ │   │   └── UserValidator.java
+ │   └── event
+ │       ├── UserRegisteredEvent.java
+ │       ├── UserUpdatedEvent.java
+ │       └── UserDeletedEvent.java
+ │
+ ├── organization
+ │   ├── controller
+ │   │   ├── OrganizationController.java
+ │   │   └── OperatorController.java
+ │   ├── dto
+ │   │   ├── OrganizationCreateRequest.java
+ │   │   ├── OrganizationUpdateRequest.java
+ │   │   └── OrganizationResponse.java
+ │   ├── entity
+ │   │   ├── Organization.java
+ │   │   ├── OrganizationMember.java
+ │   │   └── OrganizationSettings.java
+ │   ├── mapper
+ │   │   └── OrganizationMapper.java
+ │   ├── policy
+ │   │   └── OrganizationPolicy.java
+ │   ├── repository
+ │   │   ├── OrganizationRepository.java
+ │   │   └── OrganizationMemberRepository.java
+ │   ├── service
+ │   │   ├── OrganizationService.java
+ │   │   └── OrganizationMemberService.java
+ │   └── event
+ │       ├── OrganizationCreatedEvent.java
+ │       └── OrganizationUpdatedEvent.java
+ │
+ ├── fleet
+ │   ├── vehicle
+ │   │   ├── Vehicle.java
+ │   │   ├── VehicleRepository.java
+ │   │   ├── VehicleService.java
+ │   │   ├── VehicleController.java
+ │   │   ├── VehicleMapper.java
+ │   │   └── dto
+ │   │       ├── VehicleCreateRequest.java
+ │   │       ├── VehicleUpdateRequest.java
+ │   │       └── VehicleResponse.java
+ │   │
+ │   ├── driver
+ │   │   ├── Driver.java
+ │   │   ├── DriverRepository.java
+ │   │   ├── DriverService.java
+ │   │   ├── DriverController.java
+ │   │   ├── DriverMapper.java
+ │   │   └── dto
+ │   │       ├── DriverCreateRequest.java
+ │   │       ├── DriverUpdateRequest.java
+ │   │       └── DriverResponse.java
+ │   │
+ │   ├── assignment
+ │   │   ├── VehicleDriverAssignment.java
+ │   │   ├── AssignmentRepository.java
+ │   │   ├── AssignmentService.java
+ │   │   └── AssignmentController.java
+ │   │
+ │   ├── gps
+ │   │   ├── GpsDevice.java
+ │   │   ├── GpsDeviceRepository.java
+ │   │   ├── GpsDeviceService.java
+ │   │   └── GpsDeviceController.java
+ │   │
+ │   ├── inspection
+ │   │   ├── VehicleInspection.java
+ │   │   ├── InspectionRepository.java
+ │   │   └── InspectionService.java
+ │   │
+ │   ├── maintenance
+ │   │   ├── MaintenanceRecord.java
+ │   │   ├── MaintenanceRepository.java
+ │   │   └── MaintenanceService.java
+ │   │
+ │   ├── controller.\mvnw.cmd clean test
+ │   │   └── FleetController.java
+ │   ├── dto
+ │   │   └── FleetResponse.java
+ │   └── event
+ │       ├── VehicleCreatedEvent.java
+ │       ├── DriverAssignedEvent.java
+ │       └── VehicleStatusChangedEvent.java
+ │
+ ├── route
+ │   ├── controller
+ │   │   ├── RouteController.java
+ │   │   └── StopController.java
+ │   ├── dto
+ │   │   ├── RouteCreateRequest.java
+ │   │   ├── RouteUpdateRequest.java
+ │   │   └── RouteResponse.java
+ │   ├── entity
+ │   │   ├── Route.java
+ │   │   ├── Stop.java
+ │   │   ├── RouteStop.java
+ │   │   └── Schedule.java
+ │   ├── mapper
+ │   │   └── RouteMapper.java
+ │   ├── repository
+ │   │   ├── RouteRepository.java
+ │   │   ├── StopRepository.java
+ │   │   └── ScheduleRepository.java
+ │   ├── routing
+ │   │   ├── RoutingService.java
+ │   │   └── RouteCalculationService.java
+ │   ├── service
+ │   │   ├── RouteService.java
+ │   │   ├── StopService.java
+ │   │   └── ScheduleService.java
+ │   └── event
+ │       ├── RouteCreatedEvent.java
+ │       └── RouteUpdatedEvent.java
+ │
+ ├── location
+ │   ├── ingestion
+ │   │   ├── LocationIngestionService.java
+ │   │   ├── GpsPingProcessor.java
+ │   │   └── GpsPingValidator.java
+ │   ├── tracking
+ │   │   ├── VehicleTrackingService.java
+ │   │   └── LiveLocationService.java
+ │   ├── cache
+ │   │   ├── LiveLocationCache.java
+ │   │   └── VehicleLocationCache.java
+ │   ├── history
+ │   │   ├── LocationHistory.java
+ │   │   ├── LocationHistoryRepository.java
+ │   │   └── LocationHistoryService.java
+ │   ├── geofence
+ │   │   ├── Geofence.java
+ │   │   ├── GeofenceService.java
+ │   │   └── GeofenceEvent.java
+ │   ├── controller
+ │   │   ├── LocationIngestionController.java
+ │   │   └── VehicleTrackingController.java
+ │   ├── dto
+ │   │   ├── GpsPingRequest.java
+ │   │   ├── LiveLocationResponse.java
+ │   │   └── NearbyVehicleResponse.java
+ │   ├── repository
+ │   │   └── VehicleLiveLocationRepository.java
+ │   ├── service
+ │   │   └── LocationService.java
+ │   └── event
+ │       └── LocationUpdatedEvent.java
+ │
+ ├── realtime
+ │   ├── websocket
+ │   │   ├── WebSocketConfig.java
+ │   │   └── TrackingWebSocketHandler.java
+ │   ├── publisher
+ │   │   └── RealtimePublisher.java
+ │   ├── subscriber
+ │   │   └── RealtimeSubscriber.java
+ │   ├── session
+ │   │   └── RealtimeSessionManager.java
+ │   └── config
+ │       └── RealtimeConfig.java
+ │
+ ├── passenger
+ │   ├── controller
+ │   │   └── PassengerController.java
+ │   ├── dto
+ │   │   ├── PassengerProfileRequest.java
+ │   │   └── PassengerResponse.java
+ │   ├── entity
+ │   │   ├── PassengerProfile.java
+ │   │   ├── FavoriteRoute.java
+ │   │   └── SavedPlace.java
+ │   ├── history
+ │   │   ├── SearchHistory.java
+ │   │   └── TripHistory.java
+ │   ├── preferences
+ │   │   └── PassengerPreference.java
+ │   ├── recommendation
+ │   │   └── PassengerRecommendationService.java
+ │   ├── repository
+ │   │   ├── PassengerProfileRepository.java
+ │   │   ├── FavoriteRouteRepository.java
+ │   │   └── SearchHistoryRepository.java
+ │   ├── service
+ │   │   ├── PassengerService.java
+ │   │   └── SavedPlaceService.java
+ │   └── event
+ │       └── PassengerRegisteredEvent.java
+ │
+ ├── search
+ │   ├── controller
+ │   │   └── SearchController.java
+ │   ├── dto
+ │   │   ├── RouteSearchRequest.java
+ │   │   ├── RouteSearchResponse.java
+ │   │   └── NearbyVehicleResponse.java
+ │   ├── mapper
+ │   │   └── SearchResultMapper.java
+ │   ├── cache
+ │   │   └── SearchCache.java
+ │   ├── nearby
+ │   │   └── NearbyVehicleService.java
+ │   ├── eta
+ │   │   └── EtaCalculationService.java
+ │   ├── routing
+ │   │   └── RouteMatchingService.java
+ │   ├── recommendation
+ │   │   └── SearchRecommendationService.java
+ │   └── service
+ │       └── SearchService.java
+ │
+ ├── subscription
+ │   ├── billing
+ │   │   ├── BillingService.java
+ │   │   └── BillingCalculator.java
+ │   ├── invoice
+ │   │   ├── Invoice.java
+ │   │   ├── InvoiceRepository.java
+ │   │   └── InvoiceService.java
+ │   ├── paymentstatus
+ │   │   └── SubscriptionPaymentStatus.java
+ │   ├── controller
+ │   │   ├── SubscriptionController.java
+ │   │   └── PlanController.java
+ │   ├── dto
+ │   │   ├── SubscriptionRequest.java
+ │   │   ├── SubscriptionResponse.java
+ │   │   └── PlanResponse.java
+ │   ├── entity
+ │   │   ├── Subscription.java
+ │   │   └── SubscriptionPlan.java
+ │   ├── repository
+ │   │   ├── SubscriptionRepository.java
+ │   │   └── SubscriptionPlanRepository.java
+ │   ├── service
+ │   │   └── SubscriptionService.java
+ │   └── event
+ │       ├── SubscriptionCreatedEvent.java
+ │       └── SubscriptionExpiredEvent.java
+ │
+ ├── payment
+ │   ├── controller
+ │   │   └── PaymentController.java
+ │   ├── dto
+ │   │   ├── PaymentRequest.java
+ │   │   └── PaymentResponse.java
+ │   ├── entity
+ │   │   └── Payment.java
+ │   ├── provider
+ │   │   ├── PaymentProvider.java
+ │   │   └── PaymentProviderFactory.java
+ │   ├── repository
+ │   │   └── PaymentRepository.java
+ │   ├── service
+ │   │   └── PaymentService.java
+ │   ├── webhook
+ │   │   └── PaymentWebhookController.java
+ │   └── event
+ │       ├── PaymentCompletedEvent.java
+ │       └── PaymentFailedEvent.java
+ │
+ ├── notification
+ │   ├── email
+ │   │   └── EmailNotificationService.java
+ │   ├── inapp
+ │   │   └── InAppNotificationService.java
+ │   ├── preference
+ │   │   └── NotificationPreference.java
+ │   ├── push
+ │   │   └── PushNotificationService.java
+ │   ├── sms
+ │   │   └── SmsNotificationService.java
+ │   ├── template
+ │   │   └── NotificationTemplate.java
+ │   ├── controller
+ │   │   └── NotificationController.java
+ │   ├── dto
+ │   │   └── NotificationResponse.java
+ │   ├── repository
+ │   │   └── NotificationRepository.java
+ │   ├── service
+ │   │   └── NotificationService.java
+ │   └── event
+ │       └── NotificationRequestedEvent.java
+ │
+ ├── reporting
+ │   ├── analytics
+ │   │   └── AnalyticsService.java
+ │   ├── dashboard
+ │   │   └── DashboardService.java
+ │   ├── export
+ │   │   └── ReportExportService.java
+ │   ├── controller
+ │   │   └── ReportingController.java
+ │   ├── dto
+ │   │   ├── DailyVehicleReport.java
+ │   │   └── FleetReportResponse.java
+ │   ├── repository
+ │   │   └── ReportRepository.java
+ │   └── service
+ │       └── ReportingService.java
+ │
+ ├── ai
+ │   ├── assistant
+ │   │   └── MobilityAssistantService.java
+ │   ├── memory
+ │   │   └── AiMemoryService.java
+ │   ├── model
+ │   │   └── AiModel.java
+ │   ├── prediction
+ │   │   ├── DemandPredictionService.java
+ │   │   └── EtaPredictionService.java
+ │   ├── prompt
+ │   │   └── PromptTemplate.java
+ │   ├── provider
+ │   │   ├── AiProvider.java
+ │   │   └── AiProviderFactory.java
+ │   ├── recommendation
+ │   │   └── AiRecommendationService.java
+ │   ├── vector
+ │   │   └── VectorSearchService.java
+ │   ├── controller
+ │   │   └── AiController.java
+ │   ├── dto
+ │   │   └── PredictionResponse.java
+ │   └── service
+ │       └── AiService.java
+ │
+ ├── integration
+ │   ├── ai
+ │   │   └── AiIntegrationAdapter.java
+ │   ├── government
+ │   │   └── GovernmentTransportAdapter.java
+ │   ├── gps
+ │   │   └── GpsProviderAdapter.java
+ │   ├── maps
+ │   │   ├── MapsProvider.java
+ │   │   ├── GoogleMapsAdapter.java
+ │   │   └── GeocodingAdapter.java
+ │   ├── mqtt
+ │   │   └── MqttGpsAdapter.java
+ │   ├── payment
+ │   │   └── PaymentIntegrationAdapter.java
+ │   ├── sms
+ │   │   └── SmsProviderAdapter.java
+ │   └── webhook
+ │       └── WebhookAdapter.java
+ │
+ ├── file
+ │   ├── controller
+ │   │   └── FileController.java
+ │   ├── dto
+ │   │   └── FileResponse.java
+ │   ├── entity
+ │   │   └── FileMetadata.java
+ │   ├── repository
+ │   │   └── FileMetadataRepository.java
+ │   ├── service
+ │   │   └── FileService.java
+ │   └── storage
+ │       ├── FileStorage.java
+ │       └── LocalFileStorage.java
+ │
+ ├── audit
+ │   ├── controller
+ │   │   └── AuditController.java
+ │   ├── entity
+ │   │   └── AuditLog.java
+ │   ├── repository
+ │   │   └── AuditLogRepository.java
+ │   └── service
+ │       └── AuditService.java
+ │
+ ├── scheduler
+ │   ├── cleanup
+ │   │   └── CleanupScheduler.java
+ │   ├── report
+ │   │   └── ReportScheduler.java
+ │   ├── subscription
+ │   │   └── SubscriptionScheduler.java
+ │   └── synchronization
+ │       └── SynchronizationScheduler.java
+ │
+ ├── monitoring
+ │   ├── health
+ │   │   └── MobilityHealthIndicator.java
+ │   ├── logging
+ │   │   └── LoggingConfiguration.java
+ │   ├── metrics
+ │   │   └── MobilityMetrics.java
+ │   └── tracing
+ │       └── TracingConfiguration.java
+ │
+ ├── mobility
+ │   ├── coordinator
+ │   │   └── MobilityCoordinator.java
+ │   ├── facade
+ │   │   └── MobilityFacade.java
+ │   ├── workflow
+ │   │   ├── TripSearchWorkflow.java
+ │   │   └── VehicleTrackingWorkflow.java
+ │   └── service
+ │       └── MobilityService.java
+ │
+ ├── admin
+ │   ├── controller
+ │   │   ├── AdminController.java
+ │   │   └── PlatformMonitoringController.java
+ │   ├── dto
+ │   │   └── AdminResponse.java
+ │   ├── repository
+ │   │   └── AdminRepository.java
+ │   └── service
+ │       ├── AdminService.java
+ │       └── PlatformAdministrationService.java
+ │
+ └── infrastructure
+     ├── cache
+     │   ├── RedisConfig.java
+     │   ├── RedisCacheService.java
+     │   └── RedisKeyManager.java
+     │
+     ├── database
+     │   ├── DatabaseConfig.java
+     │   ├── PostGisConfig.java
+     │   └── JpaConfiguration.java
+     │
+     ├── messaging
+     │   ├── MessagingConfig.java
+     │   ├── MessagePublisher.java
+     │   └── MessageConsumer.java
+     │
+     ├── multitenancy
+     │   ├── TenantContext.java
+     │   ├── TenantResolver.java
+     │   └── TenantInterceptor.java
+     │
+     ├── observability
+     │   ├── MetricsConfig.java
+     │   ├── TracingConfig.java
+     │   └── LoggingConfig.java
+     │
+     ├── scheduler
+     │   └── SchedulerConfig.java
+     │
+     ├── security
+     │   ├── EncryptionConfig.java
+     │   └── KeyManagementService.java
+     │
+     └── storage
+         ├── StorageConfig.java
+         └── StorageProvider.java

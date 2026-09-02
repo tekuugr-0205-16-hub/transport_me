@@ -1,0 +1,198 @@
+
+### ============================================
+### AUTH
+### ============================================
+
+### Register user
+POST http://localhost:8080/auth/register
+Content-Type: application/json
+
+{
+  "phoneNumber": "0966111714",
+  "password": "ownerpass123"
+}
+### Register user
+POST http://localhost:8080/auth/register
+Content-Type: application/json
+
+{
+  "phoneNumber": "09661111134",
+  "password": "ownerpass123"
+}
+
+### Register second user
+POST http://localhost:8080/auth/register
+Content-Type: application/json
+
+{
+  "phoneNumber": "0966222255",
+  "password": "driverpass123"
+}
+
+### Login (use instead of register if these numbers are already taken)
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{
+  "phoneNumber": "0966111714",
+  "password": "ownerpass123"
+}
+
+### Refresh token
+POST http://localhost:8080/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken":"PASTE_REFRESH_TOKEN_HERE"
+}
+
+
+### JWT security check — an ACCESS token must NOT be accepted as a refresh token
+### Expected: 401 Unauthorized
+POST http://localhost:8080/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "PASTE_ACCESS_TOKEN_HERE"
+}
+
+### JWT security check — a REFRESH token must NOT authenticate an API request
+### Expected: 401 Unauthorized
+GET http://localhost:8080/vehicles/my
+Authorization: Bearer PASTE_REFRESH_TOKEN_HERE
+
+
+### ============================================
+### FLEET — vehicle accounts
+### ============================================
+
+### User creates a vehicle account
+### Paste creator's accessToken below
+POST http://localhost:8080/vehicles
+Content-Type: application/json
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+
+{
+  "plateNumber": "AA-70999",
+  "vehicleType": "MINIBUS",
+  "capacity": 12
+}
+
+### Get all vehicles I'm a member of
+### Paste any member's accessToken below
+GET http://localhost:8080/vehicles/my
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+
+### Vehicle member invites another user by phone number
+### Paste a vehicle member's token and the vehicle id below
+POST http://localhost:8080/vehicles/1/members/invite
+Content-Type: application/json
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+
+
+
+{
+  "phoneNumber": "0966222252"
+}
+
+### Invited user accepts the invitation
+### Paste invited user's token and the invitation id below
+POST http://localhost:8080/vehicles/invitations/5/accept
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+
+
+### ============================================
+### LOCATION — live tracking
+### ============================================
+
+### Send a GPS ping (must be a member AND vehicle must be ACTIVE)
+### Paste vehicle member's token and the vehicle id below
+POST http://localhost:8080/vehicles/1/location
+Content-Type: application/json
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+
+{
+  "latitude": 9.0192,
+  "longitude": 38.7525,
+  "speed": 24.5,
+  "heading": 180.0
+}
+
+### Get the vehicle's live location (any authenticated user — passenger view)
+### Paste any token and the vehicle id below
+GET http://localhost:8080/vehicles/1/location
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+
+
+
+### Search nearby vehicles (any authenticated user — passenger view)
+### Paste any token below. Coordinates are close to the test ping location.
+GET http://localhost:8080/search/nearby?lat=9.02&lng=38.75&radiusMeters=2000
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+### Search nearby vehicles (any authenticated user — passenger view)
+### Paste any token below. Coordinates are close to the test ping location.
+GET http://localhost:8080/search/nearby?lat=9.02&lng=38.75&radiusMeters=2000
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+
+
+POST http://localhost:8080/vehicles/1/location
+Content-Type: application/json
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+
+
+{
+  "latitude": 9.0192,
+  "longitude": 38.7525,
+  "speed": 24.5,
+  "heading": 180.0
+}
+
+
+
+
+
+### ============================================
+### VEHICLE STATUS SECURITY CHECKS
+### ============================================
+### ACTIVE is the only status allowed to publish/serve live location.
+### For now new vehicles are ACTIVE automatically because verification/admin approval
+### is not built yet. To manually test INACTIVE behavior in development, change a
+### vehicle status in PostgreSQL and then retry the location/search requests above.
+### Expected for POST /vehicles/{id}/location when INACTIVE/UNDER_MAINTENANCE: 403
+### Expected for GET /vehicles/{id}/location when INACTIVE/UNDER_MAINTENANCE: 404
+### Expected for /search/nearby: that vehicle is omitted.
+
+
+### ============================================
+### VEHICLE INVITATIONS — inbox + decline checks
+### ============================================
+
+### List pending invitations addressed to the logged-in user's phone number
+GET http://localhost:8080/vehicles/invitations/my
+Authorization: Bearer PASTE_INVITED_USER_ACCESS_TOKEN_HERE
+
+### Decline a pending invitation
+POST http://localhost:8080/vehicles/invitations/5/decline
+Authorization: Bearer PASTE_INVITED_USER_ACCESS_TOKEN_HERE
+
+### Duplicate pending invitation check
+### Send the same vehicle + phone invitation twice.
+### First request: 201 Created
+### Second request while the first remains PENDING: 409 Conflict
+POST http://localhost:8080/vehicles/1/members/invite
+Content-Type: application/json
+Authorization: Bearer PASTE_VEHICLE_MEMBER_ACCESS_TOKEN_HERE
+
+{
+  "phoneNumber": "0966222252"
+}
+
+### Existing-member invitation check
+### If the phone number already belongs to a VehicleMember for vehicle 1: 409 Conflict
+POST http://localhost:8080/vehicles/1/members/invite
+Content-Type: application/json
+Authorization: Bearer PASTE_VEHICLE_MEMBER_ACCESS_TOKEN_HERE
+
+{
+  "phoneNumber": "PASTE_EXISTING_MEMBER_PHONE_HERE"
+}

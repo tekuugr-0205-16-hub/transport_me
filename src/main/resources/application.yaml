@@ -1,0 +1,49 @@
+spring:
+
+  application:
+    name: mobility-os-backend
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mobilityos}
+    username: ${DB_USERNAME:mobilityos}
+    password: ${DB_PASSWORD:mobilityos_dev_password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - info
+          - metrics
+
+  endpoint:
+    health:
+      show-details: when_authorized
+mobilityos:
+  jwt:
+    secret: ${JWT_SECRET:c2VjdXJlLWRldi1vbmx5LXNlY3JldC1kby1ub3QtdXNlLWluLXByb2R1Y3Rpb24tMjU2Yml0}
+    access-token-expiration-minutes: 30
+    refresh-token-expiration-days: 30

@@ -1,0 +1,50 @@
+services:
+
+  postgres:
+    image: postgis/postgis:17-3.5
+    container_name: mobilityos-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: mobilityos
+      POSTGRES_USER: mobilityos
+      POSTGRES_PASSWORD: mobilityos_dev_password
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - mobilityos-postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobilityos -d mobilityos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  redis:
+    image: redis:8-alpine
+    container_name: mobilityos-redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - mobilityos-redis-data:/data
+
+    command: redis-server --appendonly yes
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+volumes:
+
+  mobilityos-postgres-data:
+
+  mobilityos-redis-data:

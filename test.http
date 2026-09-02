@@ -1,0 +1,102 @@
+@baseUrl = http://localhost:8080
+@vehicleId = 2
+
+### 1. LOGIN VEHICLE MEMBER
+
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "phoneNumber": "0977334402",
+  "password": "memberpass123"
+}
+
+> {%
+    client.global.set(
+        "memberToken",
+        response.body.accessToken
+    );
+%}
+
+
+### 2. FIRST GOOD GPS POINT
+# Expected:
+# HTTP 204
+# PostgreSQL history count becomes 1
+
+POST {{baseUrl}}/vehicles/{{vehicleId}}/location
+Authorization: Bearer {{memberToken}}
+Content-Type: application/json
+
+{
+  "latitude": 9.030000,
+  "longitude": 38.740000,
+  "speed": 20.0,
+  "heading": 45.0,
+  "accuracyMeters": 5.0
+}
+
+
+### 3. VERY SMALL MOVEMENT
+# About 1-2 meters away.
+#
+# Expected:
+# HTTP 204
+# Redis updates
+# PostgreSQL history stays at 1
+
+POST {{baseUrl}}/vehicles/{{vehicleId}}/location
+Authorization: Bearer {{memberToken}}
+Content-Type: application/json
+
+{
+  "latitude": 9.030010,
+  "longitude": 38.740010,
+  "speed": 1.0,
+  "heading": 45.0,
+  "accuracyMeters": 5.0
+}
+
+
+### 4. REAL MOVEMENT
+# WAIT AT LEAST 6 SECONDS after request 3 before running this.
+#
+# This is more than 15 meters from the previous
+# stored position.
+#
+# Expected:
+# HTTP 204
+# PostgreSQL history count becomes 2
+
+POST {{baseUrl}}/vehicles/{{vehicleId}}/location
+Authorization: Bearer {{memberToken}}
+Content-Type: application/json
+
+{
+  "latitude": 9.030300,
+  "longitude": 38.740000,
+  "speed": 25.0,
+  "heading": 10.0,
+  "accuracyMeters": 6.0
+}
+
+
+### 5. BAD GPS ACCURACY
+# Expected:
+# HTTP 204
+# Redis currently still accepts the live position
+
+
+
+POST http://localhost:8080/vehicles/2/location
+Authorization: Bearer {{memberToken}}
+Content-Type: application/json
+
+{
+"latitude": 9.030300,
+"longitude": 38.740000,
+"speed": 25.0,
+"heading": 10.0,
+"accuracyMeters": 6.0
+}
+
