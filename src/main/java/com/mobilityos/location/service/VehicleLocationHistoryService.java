@@ -4,6 +4,7 @@ import com.mobilityos.fleet.vehicle.Vehicle;
 import com.mobilityos.identity.entity.User;
 import com.mobilityos.location.dto.GpsPingRequest;
 import com.mobilityos.location.entity.VehicleLocationHistory;
+import com.mobilityos.location.observation.LocationObservation;
 import com.mobilityos.location.quality.LocationQualityPolicy;
 import com.mobilityos.location.repository.VehicleLocationHistoryRepository;
 import org.springframework.stereotype.Service;
@@ -11,12 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
 public class VehicleLocationHistoryService {
 
-    private static final double MIN_DISTANCE_METERS = 15.0;
+    private static final double MIN_DISTANCE_METERS =
+            15.0;
 
     private static final Duration MIN_SAVE_INTERVAL =
             Duration.ofSeconds(5);
@@ -34,22 +37,38 @@ public class VehicleLocationHistoryService {
             VehicleLocationHistoryRepository repository,
             LocationQualityPolicy locationQualityPolicy
     ) {
-        this.repository = repository;
-        this.locationQualityPolicy = locationQualityPolicy;
+        this.repository =
+                Objects.requireNonNull(
+                        repository,
+                        "repository must not be null"
+                );
+
+        this.locationQualityPolicy =
+                Objects.requireNonNull(
+                        locationQualityPolicy,
+                        "locationQualityPolicy must not be null"
+                );
     }
 
+    /*
+     * Legacy synchronous GPS path.
+     *
+     * Keep until the old endpoint is retired.
+     */
     @Transactional
     public boolean recordIfUseful(
             Vehicle vehicle,
             User submittedByUser,
             GpsPingRequest request
     ) {
-        Instant now = Instant.now();
+        Objects.requireNonNull(
+                request,
+                "request must not be null"
+        );
 
-        /*
-         * One centralized definition of whether the
-         * GPS observation is trustworthy.
-         */
+        Instant now =
+                Instant.now();
+
         if (!locationQualityPolicy.isAcceptable(
                 request,
                 now
@@ -61,6 +80,92 @@ public class VehicleLocationHistoryService {
                 request.recordedAt() != null
                         ? request.recordedAt()
                         : now;
+
+        return recordIfUsefulInternal(
+                vehicle,
+                submittedByUser,
+                request.latitude(),
+                request.longitude(),
+                request.speed(),
+                request.heading(),
+                request.accuracyMeters(),
+                recordedAt,
+                now
+        );
+    }
+
+    /*
+     * Canonical asynchronous GPS path.
+     *
+     * Quality was already checked before publication,
+     * but checking again here gives us a defensive
+     * boundary around durable history.
+     *
+     * Use observation.receivedAt() as the reference time.
+     * Do NOT use Instant.now(), because a Redis event may
+     * be processed seconds or minutes after ingestion.
+     */
+    @Transactional
+    public boolean recordIfUseful(
+            Vehicle vehicle,
+            User submittedByUser,
+            LocationObservation observation
+    ) {
+        Objects.requireNonNull(
+                observation,
+                "observation must not be null"
+        );
+
+        if (!locationQualityPolicy.isAcceptable(
+                observation,
+                observation.receivedAt()
+        )) {
+            return false;
+        }
+
+        return recordIfUsefulInternal(
+                vehicle,
+                submittedByUser,
+                observation.latitude(),
+                observation.longitude(),
+                observation.speedMetersPerSecond(),
+                observation.headingDegrees(),
+                observation.accuracyMeters(),
+                observation.recordedAt(),
+                observation.receivedAt()
+        );
+    }
+
+    private boolean recordIfUsefulInternal(
+            Vehicle vehicle,
+            User submittedByUser,
+            double latitude,
+            double longitude,
+            Double speed,
+            Double heading,
+            Double accuracyMeters,
+            Instant recordedAt,
+            Instant receivedAt
+    ) {
+        Objects.requireNonNull(
+                vehicle,
+                "vehicle must not be null"
+        );
+
+        Objects.requireNonNull(
+                submittedByUser,
+                "submittedByUser must not be null"
+        );
+
+        Objects.requireNonNull(
+                recordedAt,
+                "recordedAt must not be null"
+        );
+
+        Objects.requireNonNull(
+                receivedAt,
+                "receivedAt must not be null"
+        );
 
         Optional<VehicleLocationHistory> latestOptional =
                 repository
@@ -74,8 +179,8 @@ public class VehicleLocationHistoryService {
                     latestOptional.get();
 
             /*
-             * Do not write duplicate or out-of-order
-             * points through this endpoint.
+             * Duplicate or out-of-order observations
+             * must never become historical points.
              */
             if (!recordedAt.isAfter(
                     latest.getRecordedAt()
@@ -90,7 +195,7 @@ public class VehicleLocationHistoryService {
                     );
 
             /*
-             * Protect PostgreSQL from excessive writes.
+             * Preserve the existing minimum interval.
              */
             if (elapsed.compareTo(
                     MIN_SAVE_INTERVAL
@@ -102,30 +207,34 @@ public class VehicleLocationHistoryService {
                     distanceMeters(
                             latest.getLatitude(),
                             latest.getLongitude(),
-                            request.latitude(),
-                            request.longitude()
+                            latitude,
+                            longitude
                     );
 
             /*
-             * Vehicle moved enough for the point to be
-             * meaningful historical movement.
+             * Save meaningful movement.
              */
-            if (distanceMeters >= MIN_DISTANCE_METERS) {
+            if (distanceMeters
+                    >= MIN_DISTANCE_METERS) {
 
                 save(
                         vehicle,
                         submittedByUser,
-                        request,
-                        recordedAt
+                        latitude,
+                        longitude,
+                        speed,
+                        heading,
+                        accuracyMeters,
+                        recordedAt,
+                        receivedAt
                 );
 
                 return true;
             }
 
             /*
-             * Even when the vehicle stays in one place,
-             * periodically save proof that it was still
-             * reporting location.
+             * Save occasional proof of presence even when
+             * the vehicle has barely moved.
              */
             if (elapsed.compareTo(
                     FORCE_SAVE_INTERVAL
@@ -134,8 +243,13 @@ public class VehicleLocationHistoryService {
                 save(
                         vehicle,
                         submittedByUser,
-                        request,
-                        recordedAt
+                        latitude,
+                        longitude,
+                        speed,
+                        heading,
+                        accuracyMeters,
+                        recordedAt,
+                        receivedAt
                 );
 
                 return true;
@@ -145,13 +259,18 @@ public class VehicleLocationHistoryService {
         }
 
         /*
-         * First useful historical position.
+         * First useful historical observation.
          */
         save(
                 vehicle,
                 submittedByUser,
-                request,
-                recordedAt
+                latitude,
+                longitude,
+                speed,
+                heading,
+                accuracyMeters,
+                recordedAt,
+                receivedAt
         );
 
         return true;
@@ -160,22 +279,30 @@ public class VehicleLocationHistoryService {
     private void save(
             Vehicle vehicle,
             User submittedByUser,
-            GpsPingRequest request,
-            Instant recordedAt
+            double latitude,
+            double longitude,
+            Double speed,
+            Double heading,
+            Double accuracyMeters,
+            Instant recordedAt,
+            Instant receivedAt
     ) {
         VehicleLocationHistory location =
                 new VehicleLocationHistory(
                         vehicle,
                         submittedByUser,
-                        request.latitude(),
-                        request.longitude(),
-                        request.speed(),
-                        request.heading(),
-                        request.accuracyMeters(),
-                        recordedAt
+                        latitude,
+                        longitude,
+                        speed,
+                        heading,
+                        accuracyMeters,
+                        recordedAt,
+                        receivedAt
                 );
 
-        repository.save(location);
+        repository.save(
+                location
+        );
     }
 
     private double distanceMeters(
@@ -185,10 +312,14 @@ public class VehicleLocationHistoryService {
             double longitude2
     ) {
         double latitudeRadians1 =
-                Math.toRadians(latitude1);
+                Math.toRadians(
+                        latitude1
+                );
 
         double latitudeRadians2 =
-                Math.toRadians(latitude2);
+                Math.toRadians(
+                        latitude2
+                );
 
         double latitudeDifference =
                 Math.toRadians(

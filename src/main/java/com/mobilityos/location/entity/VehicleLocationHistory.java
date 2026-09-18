@@ -93,6 +93,12 @@ public class VehicleLocationHistory {
         // Required by JPA
     }
 
+    /*
+     * Legacy constructor.
+     *
+     * Keep this while the old GPS endpoint still writes
+     * history synchronously.
+     */
     public VehicleLocationHistory(
             Vehicle vehicle,
             User submittedByUser,
@@ -102,6 +108,36 @@ public class VehicleLocationHistory {
             Double heading,
             Double accuracyMeters,
             Instant recordedAt
+    ) {
+        this(
+                vehicle,
+                submittedByUser,
+                latitude,
+                longitude,
+                speed,
+                heading,
+                accuracyMeters,
+                recordedAt,
+                Instant.now()
+        );
+    }
+
+    /*
+     * Canonical constructor.
+     *
+     * Async processing must preserve the original server
+     * receive time instead of using the later worker time.
+     */
+    public VehicleLocationHistory(
+            Vehicle vehicle,
+            User submittedByUser,
+            double latitude,
+            double longitude,
+            Double speed,
+            Double heading,
+            Double accuracyMeters,
+            Instant recordedAt,
+            Instant receivedAt
     ) {
         this.vehicle = Objects.requireNonNull(
                 vehicle,
@@ -130,7 +166,10 @@ public class VehicleLocationHistory {
                 "recordedAt must not be null"
         );
 
-        this.receivedAt = Instant.now();
+        this.receivedAt = Objects.requireNonNull(
+                receivedAt,
+                "receivedAt must not be null"
+        );
     }
 
     public Long getId() {
@@ -173,7 +212,9 @@ public class VehicleLocationHistory {
         return receivedAt;
     }
 
-    private static void validateLatitude(double latitude) {
+    private static void validateLatitude(
+            double latitude
+    ) {
         if (!Double.isFinite(latitude)
                 || latitude < -90.0
                 || latitude > 90.0) {
@@ -184,7 +225,9 @@ public class VehicleLocationHistory {
         }
     }
 
-    private static void validateLongitude(double longitude) {
+    private static void validateLongitude(
+            double longitude
+    ) {
         if (!Double.isFinite(longitude)
                 || longitude < -180.0
                 || longitude > 180.0) {
@@ -195,9 +238,12 @@ public class VehicleLocationHistory {
         }
     }
 
-    private static void validateSpeed(Double speed) {
+    private static void validateSpeed(
+            Double speed
+    ) {
         if (speed != null
-                && (!Double.isFinite(speed) || speed < 0.0)) {
+                && (!Double.isFinite(speed)
+                || speed < 0.0)) {
 
             throw new IllegalArgumentException(
                     "speed must be zero or positive"
@@ -205,7 +251,9 @@ public class VehicleLocationHistory {
         }
     }
 
-    private static void validateHeading(Double heading) {
+    private static void validateHeading(
+            Double heading
+    ) {
         if (heading != null
                 && (!Double.isFinite(heading)
                 || heading < 0.0
@@ -217,7 +265,9 @@ public class VehicleLocationHistory {
         }
     }
 
-    private static void validateAccuracy(Double accuracyMeters) {
+    private static void validateAccuracy(
+            Double accuracyMeters
+    ) {
         if (accuracyMeters != null
                 && (!Double.isFinite(accuracyMeters)
                 || accuracyMeters < 0.0)) {

@@ -15,3 +15,8 @@ spring:
       database: ${TEST_REDIS_DATABASE:15}
       repositories:
         enabled: false
+
+mobilityos:
+  location:
+    history-worker:
+      enabled: false
