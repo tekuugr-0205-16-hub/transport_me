@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class VehicleLocationHistoryService {
@@ -54,6 +55,9 @@ public class VehicleLocationHistoryService {
      * Legacy synchronous GPS path.
      *
      * Keep until the old endpoint is retired.
+     *
+     * Legacy history rows intentionally have no canonical
+     * observation/session/sequence identity.
      */
     @Transactional
     public boolean recordIfUseful(
@@ -84,6 +88,9 @@ public class VehicleLocationHistoryService {
         return recordIfUsefulInternal(
                 vehicle,
                 submittedByUser,
+                null,
+                null,
+                null,
                 request.latitude(),
                 request.longitude(),
                 request.speed(),
@@ -104,6 +111,12 @@ public class VehicleLocationHistoryService {
      * Use observation.receivedAt() as the reference time.
      * Do NOT use Instant.now(), because a Redis event may
      * be processed seconds or minutes after ingestion.
+     *
+     * Canonical identity is preserved into PostgreSQL:
+     *
+     * - observationId
+     * - trackingSessionId
+     * - sequenceNumber
      */
     @Transactional
     public boolean recordIfUseful(
@@ -126,6 +139,9 @@ public class VehicleLocationHistoryService {
         return recordIfUsefulInternal(
                 vehicle,
                 submittedByUser,
+                observation.observationId(),
+                observation.trackingSessionId(),
+                observation.sequenceNumber(),
                 observation.latitude(),
                 observation.longitude(),
                 observation.speedMetersPerSecond(),
@@ -139,6 +155,9 @@ public class VehicleLocationHistoryService {
     private boolean recordIfUsefulInternal(
             Vehicle vehicle,
             User submittedByUser,
+            UUID observationId,
+            UUID trackingSessionId,
+            Long sequenceNumber,
             double latitude,
             double longitude,
             Double speed,
@@ -220,6 +239,9 @@ public class VehicleLocationHistoryService {
                 save(
                         vehicle,
                         submittedByUser,
+                        observationId,
+                        trackingSessionId,
+                        sequenceNumber,
                         latitude,
                         longitude,
                         speed,
@@ -243,6 +265,9 @@ public class VehicleLocationHistoryService {
                 save(
                         vehicle,
                         submittedByUser,
+                        observationId,
+                        trackingSessionId,
+                        sequenceNumber,
                         latitude,
                         longitude,
                         speed,
@@ -264,6 +289,9 @@ public class VehicleLocationHistoryService {
         save(
                 vehicle,
                 submittedByUser,
+                observationId,
+                trackingSessionId,
+                sequenceNumber,
                 latitude,
                 longitude,
                 speed,
@@ -279,6 +307,9 @@ public class VehicleLocationHistoryService {
     private void save(
             Vehicle vehicle,
             User submittedByUser,
+            UUID observationId,
+            UUID trackingSessionId,
+            Long sequenceNumber,
             double latitude,
             double longitude,
             Double speed,
@@ -291,6 +322,9 @@ public class VehicleLocationHistoryService {
                 new VehicleLocationHistory(
                         vehicle,
                         submittedByUser,
+                        observationId,
+                        trackingSessionId,
+                        sequenceNumber,
                         latitude,
                         longitude,
                         speed,

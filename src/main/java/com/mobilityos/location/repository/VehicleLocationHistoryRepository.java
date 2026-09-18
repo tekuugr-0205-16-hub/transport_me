@@ -7,12 +7,28 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface VehicleLocationHistoryRepository
         extends JpaRepository<VehicleLocationHistory, Long> {
 
     Optional<VehicleLocationHistory>
-    findFirstByVehicleIdOrderByRecordedAtDesc(Long vehicleId);
+    findFirstByVehicleIdOrderByRecordedAtDesc(
+            Long vehicleId
+    );
+
+    Optional<VehicleLocationHistory>
+    findByObservationId(
+            UUID observationId
+    );
+
+    boolean existsByObservationId(
+            UUID observationId
+    );
+
+    long countByObservationId(
+            UUID observationId
+    );
 
     Slice<VehicleLocationHistory>
     findByVehicleIdAndRecordedAtGreaterThanEqualAndRecordedAtLessThanOrderByRecordedAtAsc(

@@ -280,12 +280,38 @@ class LocationHistoryPipelineIntegrationTest {
         assertThat(processed)
                 .isEqualTo(1);
 
+
+
         VehicleLocationHistory persisted =
                 historyRepository
-                        .findFirstByVehicleIdOrderByRecordedAtDesc(
-                                vehicle.getId()
+                        .findByObservationId(
+                                observation.observationId()
                         )
                         .orElseThrow();
+
+
+
+        assertThat(
+                persisted.getObservationId()
+        ).isEqualTo(
+                observation.observationId()
+        );
+
+        assertThat(
+                persisted.getTrackingSessionId()
+        ).isEqualTo(
+                observation.trackingSessionId()
+        );
+
+        assertThat(
+                persisted.getSequenceNumber()
+        ).isEqualTo(
+                observation.sequenceNumber()
+        );
+
+
+
+
 
         assertThat(
                 persisted.getVehicle().getId()

@@ -2,10 +2,20 @@ package com.mobilityos.location.entity;
 
 import com.mobilityos.fleet.vehicle.Vehicle;
 import com.mobilityos.identity.entity.User;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 @Entity
 @Table(
@@ -27,7 +37,10 @@ public class VehicleLocationHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
     @JoinColumn(
             name = "vehicle_id",
             nullable = false,
@@ -35,13 +48,40 @@ public class VehicleLocationHistory {
     )
     private Vehicle vehicle;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
     @JoinColumn(
             name = "submitted_by_user_id",
             nullable = false,
             updatable = false
     )
     private User submittedByUser;
+
+    /*
+     * Canonical GPS identity.
+     *
+     * These fields are null for legacy synchronous GPS rows.
+     * Canonical async observations must provide all three.
+     */
+    @Column(
+            name = "observation_id",
+            updatable = false
+    )
+    private UUID observationId;
+
+    @Column(
+            name = "tracking_session_id",
+            updatable = false
+    )
+    private UUID trackingSessionId;
+
+    @Column(
+            name = "sequence_number",
+            updatable = false
+    )
+    private Long sequenceNumber;
 
     @Column(
             name = "latitude",
@@ -94,10 +134,10 @@ public class VehicleLocationHistory {
     }
 
     /*
-     * Legacy constructor.
+     * Legacy synchronous GPS constructor.
      *
-     * Keep this while the old GPS endpoint still writes
-     * history synchronously.
+     * Legacy rows intentionally do not have canonical
+     * observation/session/sequence identity.
      */
     public VehicleLocationHistory(
             Vehicle vehicle,
@@ -123,10 +163,10 @@ public class VehicleLocationHistory {
     }
 
     /*
-     * Canonical constructor.
+     * Legacy-compatible constructor with an explicit
+     * receivedAt timestamp.
      *
-     * Async processing must preserve the original server
-     * receive time instead of using the later worker time.
+     * This remains available for existing callers and tests.
      */
     public VehicleLocationHistory(
             Vehicle vehicle,
@@ -139,14 +179,62 @@ public class VehicleLocationHistory {
             Instant recordedAt,
             Instant receivedAt
     ) {
-        this.vehicle = Objects.requireNonNull(
+        this(
                 vehicle,
-                "vehicle must not be null"
-        );
-
-        this.submittedByUser = Objects.requireNonNull(
                 submittedByUser,
-                "submittedByUser must not be null"
+                null,
+                null,
+                null,
+                latitude,
+                longitude,
+                speed,
+                heading,
+                accuracyMeters,
+                recordedAt,
+                receivedAt
+        );
+    }
+
+    /*
+     * Canonical asynchronous GPS constructor.
+     *
+     * Canonical observations preserve:
+     *
+     * - observation ID
+     * - tracking session ID
+     * - sequence number
+     * - original server receivedAt timestamp
+     */
+    public VehicleLocationHistory(
+            Vehicle vehicle,
+            User submittedByUser,
+            UUID observationId,
+            UUID trackingSessionId,
+            Long sequenceNumber,
+            double latitude,
+            double longitude,
+            Double speed,
+            Double heading,
+            Double accuracyMeters,
+            Instant recordedAt,
+            Instant receivedAt
+    ) {
+        this.vehicle =
+                Objects.requireNonNull(
+                        vehicle,
+                        "vehicle must not be null"
+                );
+
+        this.submittedByUser =
+                Objects.requireNonNull(
+                        submittedByUser,
+                        "submittedByUser must not be null"
+                );
+
+        validateCanonicalIdentity(
+                observationId,
+                trackingSessionId,
+                sequenceNumber
         );
 
         validateLatitude(latitude);
@@ -155,21 +243,41 @@ public class VehicleLocationHistory {
         validateHeading(heading);
         validateAccuracy(accuracyMeters);
 
-        this.latitude = latitude;
-        this.longitude = longitude;
-        this.speed = speed;
-        this.heading = heading;
-        this.accuracyMeters = accuracyMeters;
+        this.observationId =
+                observationId;
 
-        this.recordedAt = Objects.requireNonNull(
-                recordedAt,
-                "recordedAt must not be null"
-        );
+        this.trackingSessionId =
+                trackingSessionId;
 
-        this.receivedAt = Objects.requireNonNull(
-                receivedAt,
-                "receivedAt must not be null"
-        );
+        this.sequenceNumber =
+                sequenceNumber;
+
+        this.latitude =
+                latitude;
+
+        this.longitude =
+                longitude;
+
+        this.speed =
+                speed;
+
+        this.heading =
+                heading;
+
+        this.accuracyMeters =
+                accuracyMeters;
+
+        this.recordedAt =
+                Objects.requireNonNull(
+                        recordedAt,
+                        "recordedAt must not be null"
+                );
+
+        this.receivedAt =
+                Objects.requireNonNull(
+                        receivedAt,
+                        "receivedAt must not be null"
+                );
     }
 
     public Long getId() {
@@ -182,6 +290,18 @@ public class VehicleLocationHistory {
 
     public User getSubmittedByUser() {
         return submittedByUser;
+    }
+
+    public UUID getObservationId() {
+        return observationId;
+    }
+
+    public UUID getTrackingSessionId() {
+        return trackingSessionId;
+    }
+
+    public Long getSequenceNumber() {
+        return sequenceNumber;
     }
 
     public double getLatitude() {
@@ -210,6 +330,36 @@ public class VehicleLocationHistory {
 
     public Instant getReceivedAt() {
         return receivedAt;
+    }
+
+    private static void validateCanonicalIdentity(
+            UUID observationId,
+            UUID trackingSessionId,
+            Long sequenceNumber
+    ) {
+        boolean allNull =
+                observationId == null
+                        && trackingSessionId == null
+                        && sequenceNumber == null;
+
+        boolean allPresent =
+                observationId != null
+                        && trackingSessionId != null
+                        && sequenceNumber != null;
+
+        if (!allNull && !allPresent) {
+            throw new IllegalArgumentException(
+                    "canonical location identity must be entirely present or absent"
+            );
+        }
+
+        if (allPresent
+                && sequenceNumber <= 0) {
+
+            throw new IllegalArgumentException(
+                    "sequenceNumber must be positive"
+            );
+        }
     }
 
     private static void validateLatitude(

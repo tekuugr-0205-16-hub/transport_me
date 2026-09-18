@@ -31,8 +31,11 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class VehicleLocationHistoryServiceTest {
 
-    private static final Long VEHICLE_ID = 10L;
-    private static final Long USER_ID = 501L;
+    private static final Long VEHICLE_ID =
+            10L;
+
+    private static final Long USER_ID =
+            501L;
 
     private static final UUID OBSERVATION_ID =
             UUID.fromString(
@@ -127,6 +130,21 @@ class VehicleLocationHistoryServiceTest {
                 captor.getValue();
 
         assertEquals(
+                OBSERVATION_ID,
+                persisted.getObservationId()
+        );
+
+        assertEquals(
+                SESSION_ID,
+                persisted.getTrackingSessionId()
+        );
+
+        assertEquals(
+                847L,
+                persisted.getSequenceNumber()
+        );
+
+        assertEquals(
                 recordedAt,
                 persisted.getRecordedAt()
         );
@@ -211,9 +229,6 @@ class VehicleLocationHistoryServiceTest {
                         previousRecordedAt
                 );
 
-        /*
-         * Approximately 22 metres north.
-         */
         LocationObservation observation =
                 observation(
                         9.0102,
@@ -482,16 +497,155 @@ class VehicleLocationHistoryServiceTest {
         verifyNoInteractions(repository);
     }
 
+    @Test
+    void filteredObservationRemainsFilteredWhenDeliveredAgain() {
+
+        Instant previousRecordedAt =
+                Instant.parse(
+                        "2026-09-02T08:00:00Z"
+                );
+
+        VehicleLocationHistory latest =
+                history(
+                        9.0100,
+                        38.7600,
+                        previousRecordedAt
+                );
+
+        LocationObservation observation =
+                observation(
+                        9.0200,
+                        38.7700,
+                        previousRecordedAt.plusSeconds(4),
+                        previousRecordedAt.plusSeconds(5)
+                );
+
+        accept(observation);
+
+        when(
+                repository
+                        .findFirstByVehicleIdOrderByRecordedAtDesc(
+                                VEHICLE_ID
+                        )
+        ).thenReturn(
+                Optional.of(latest)
+        );
+
+        boolean firstAttempt =
+                service.recordIfUseful(
+                        vehicle,
+                        user,
+                        observation
+                );
+
+        boolean secondAttempt =
+                service.recordIfUseful(
+                        vehicle,
+                        user,
+                        observation
+                );
+
+        assertFalse(firstAttempt);
+        assertFalse(secondAttempt);
+
+        verify(
+                repository,
+                never()
+        ).save(any());
+    }
+
+    @Test
+    void filteredObservationCannotBecomeSaveableAfterHistoryAdvances() {
+
+        Instant firstRecordedAt =
+                Instant.parse(
+                        "2026-09-02T08:00:00Z"
+                );
+
+        VehicleLocationHistory firstHistory =
+                history(
+                        9.0100,
+                        38.7600,
+                        firstRecordedAt
+                );
+
+        LocationObservation filteredObservation =
+                observation(
+                        9.0100,
+                        38.7600,
+                        firstRecordedAt.plusSeconds(30),
+                        firstRecordedAt.plusSeconds(31)
+                );
+
+        accept(filteredObservation);
+
+        /*
+         * First delivery:
+         *
+         * 30 seconds after the saved point,
+         * no meaningful movement,
+         * and below the 60-second force-save interval.
+         */
+        when(
+                repository
+                        .findFirstByVehicleIdOrderByRecordedAtDesc(
+                                VEHICLE_ID
+                        )
+        ).thenReturn(
+                Optional.of(firstHistory)
+        );
+
+        boolean firstAttempt =
+                service.recordIfUseful(
+                        vehicle,
+                        user,
+                        filteredObservation
+                );
+
+        assertFalse(firstAttempt);
+
+        /*
+         * History later advances beyond the filtered
+         * observation.
+         */
+        VehicleLocationHistory newerHistory =
+                history(
+                        9.0200,
+                        38.7700,
+                        firstRecordedAt.plusSeconds(40)
+                );
+
+        when(
+                repository
+                        .findFirstByVehicleIdOrderByRecordedAtDesc(
+                                VEHICLE_ID
+                        )
+        ).thenReturn(
+                Optional.of(newerHistory)
+        );
+
+        /*
+         * Redelivery of T=30 must now be rejected as
+         * out-of-order relative to the saved T=40 point.
+         */
+        boolean secondAttempt =
+                service.recordIfUseful(
+                        vehicle,
+                        user,
+                        filteredObservation
+                );
+
+        assertFalse(secondAttempt);
+
+        verify(
+                repository,
+                never()
+        ).save(any());
+    }
+
     private void accept(
             LocationObservation observation
     ) {
-        /*
-         * Only accepted observations reach history lookup,
-         * therefore only these tests require vehicle.getId().
-         *
-         * Keeping this here avoids Mockito unnecessary
-         * stubbing for quality-rejected observations.
-         */
         when(vehicle.getId())
                 .thenReturn(VEHICLE_ID);
 
