@@ -5,6 +5,7 @@ import com.mobilityos.location.observation.LocationSource;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.stereotype.Component;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
@@ -21,103 +22,122 @@ public class RedisLocationEventDecoder {
                 "record must not be null"
         );
 
-        Map<String, String> fields =
-                record.getValue();
+        try {
+            Map<String, String> fields =
+                    record.getValue();
 
-        return new LocationObservation(
-                UUID.fromString(
-                        required(
-                                record,
-                                fields,
-                                "observationId"
-                        )
-                ),
-                UUID.fromString(
-                        required(
-                                record,
-                                fields,
-                                "trackingSessionId"
-                        )
-                ),
-                Long.parseLong(
-                        required(
-                                record,
-                                fields,
-                                "sequenceNumber"
-                        )
-                ),
-                Long.valueOf(
-                        required(
-                                record,
-                                fields,
-                                "vehicleId"
-                        )
-                ),
-                Long.valueOf(
-                        required(
-                                record,
-                                fields,
-                                "submittedByUserId"
-                        )
-                ),
-                UUID.fromString(
-                        required(
-                                record,
-                                fields,
-                                "deviceInstallationId"
-                        )
-                ),
-                Double.parseDouble(
-                        required(
-                                record,
-                                fields,
-                                "latitude"
-                        )
-                ),
-                Double.parseDouble(
-                        required(
-                                record,
-                                fields,
-                                "longitude"
-                        )
-                ),
-                optionalDouble(
-                        fields,
-                        "speedMetersPerSecond"
-                ),
-                optionalDouble(
-                        fields,
-                        "headingDegrees"
-                ),
-                Double.parseDouble(
-                        required(
-                                record,
-                                fields,
-                                "accuracyMeters"
-                        )
-                ),
-                Instant.parse(
-                        required(
-                                record,
-                                fields,
-                                "recordedAt"
-                        )
-                ),
-                Instant.parse(
-                        required(
-                                record,
-                                fields,
-                                "receivedAt"
-                        )
-                ),
-                LocationSource.valueOf(
-                        required(
-                                record,
-                                fields,
-                                "source"
-                        )
-                )
-        );
+            if (fields == null) {
+                throw new IllegalArgumentException(
+                        "Redis location stream record "
+                                + record.getId()
+                                + " has no fields"
+                );
+            }
+
+            return new LocationObservation(
+                    UUID.fromString(
+                            required(
+                                    record,
+                                    fields,
+                                    "observationId"
+                            )
+                    ),
+                    UUID.fromString(
+                            required(
+                                    record,
+                                    fields,
+                                    "trackingSessionId"
+                            )
+                    ),
+                    Long.parseLong(
+                            required(
+                                    record,
+                                    fields,
+                                    "sequenceNumber"
+                            )
+                    ),
+                    Long.valueOf(
+                            required(
+                                    record,
+                                    fields,
+                                    "vehicleId"
+                            )
+                    ),
+                    Long.valueOf(
+                            required(
+                                    record,
+                                    fields,
+                                    "submittedByUserId"
+                            )
+                    ),
+                    UUID.fromString(
+                            required(
+                                    record,
+                                    fields,
+                                    "deviceInstallationId"
+                            )
+                    ),
+                    Double.parseDouble(
+                            required(
+                                    record,
+                                    fields,
+                                    "latitude"
+                            )
+                    ),
+                    Double.parseDouble(
+                            required(
+                                    record,
+                                    fields,
+                                    "longitude"
+                            )
+                    ),
+                    optionalDouble(
+                            fields,
+                            "speedMetersPerSecond"
+                    ),
+                    optionalDouble(
+                            fields,
+                            "headingDegrees"
+                    ),
+                    Double.parseDouble(
+                            required(
+                                    record,
+                                    fields,
+                                    "accuracyMeters"
+                            )
+                    ),
+                    Instant.parse(
+                            required(
+                                    record,
+                                    fields,
+                                    "recordedAt"
+                            )
+                    ),
+                    Instant.parse(
+                            required(
+                                    record,
+                                    fields,
+                                    "receivedAt"
+                            )
+                    ),
+                    LocationSource.valueOf(
+                            required(
+                                    record,
+                                    fields,
+                                    "source"
+                            )
+                    )
+            );
+
+        } catch (IllegalArgumentException
+                 | DateTimeException exception) {
+
+            throw new LocationEventDecodingException(
+                    "Invalid Redis location stream record "
+                            + record.getId(),
+                    exception
+            );
+        }
     }
 
     private String required(
