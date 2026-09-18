@@ -89,6 +89,25 @@ public class FleetAccessService {
         }
     }
 
+
+    @Transactional
+    public void requireVehicleMemberForUpdate(
+            Long userId,
+            Long vehicleId
+    ) {
+        if (vehicleMemberRepository
+                .findByVehicleIdAndUserIdForUpdate(
+                        vehicleId,
+                        userId
+                )
+                .isEmpty()) {
+
+            throw new ForbiddenException(
+                    "You do not have operational access to this vehicle"
+            );
+        }
+    }
+
     @Transactional(readOnly = true)
     public void requireVehicleManager(
             Long userId,

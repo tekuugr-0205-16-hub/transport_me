@@ -24,32 +24,61 @@ import java.util.UUID;
 public class VehicleTrackingSessionService {
 
     private final VehicleTrackingSessionRepository trackingSessionRepository;
+
     private final VehicleRepository vehicleRepository;
+
     private final UserRepository userRepository;
+
     private final FleetAccessService fleetAccessService;
+
     private final VehicleTrackingRuntimeStore runtimeStore;
+
+    private final TrackingRuntimeActivationCoordinator
+            runtimeActivationCoordinator;
 
     public VehicleTrackingSessionService(
             VehicleTrackingSessionRepository trackingSessionRepository,
             VehicleRepository vehicleRepository,
             UserRepository userRepository,
             FleetAccessService fleetAccessService,
-            VehicleTrackingRuntimeStore runtimeStore
+            VehicleTrackingRuntimeStore runtimeStore,
+            TrackingRuntimeActivationCoordinator runtimeActivationCoordinator
     ) {
         this.trackingSessionRepository =
-                trackingSessionRepository;
+                Objects.requireNonNull(
+                        trackingSessionRepository,
+                        "trackingSessionRepository must not be null"
+                );
 
         this.vehicleRepository =
-                vehicleRepository;
+                Objects.requireNonNull(
+                        vehicleRepository,
+                        "vehicleRepository must not be null"
+                );
 
         this.userRepository =
-                userRepository;
+                Objects.requireNonNull(
+                        userRepository,
+                        "userRepository must not be null"
+                );
 
         this.fleetAccessService =
-                fleetAccessService;
+                Objects.requireNonNull(
+                        fleetAccessService,
+                        "fleetAccessService must not be null"
+                );
 
         this.runtimeStore =
-                runtimeStore;
+                Objects.requireNonNull(
+                        runtimeStore,
+                        "runtimeStore must not be null"
+                );
+
+        this.runtimeActivationCoordinator =
+                Objects.requireNonNull(
+                        runtimeActivationCoordinator,
+                        "runtimeActivationCoordinator must not be null"
+                );
     }
 
     // =========================================================
@@ -67,7 +96,22 @@ public class VehicleTrackingSessionService {
                 "deviceInstallationId must not be null"
         );
 
-        fleetAccessService.requireVehicleMember(
+        /*
+         * Tracking start is a lifecycle transition.
+         *
+         * The VehicleMember row is deliberately locked until
+         * this transaction completes.
+         *
+         * Membership revocation uses the same row lock, which
+         * serializes:
+         *
+         * - starting/resuming tracking
+         * - revoking operational vehicle access
+         *
+         * This prevents a session from being created after the
+         * corresponding VehicleMember has been revoked.
+         */
+        fleetAccessService.requireVehicleMemberForUpdate(
                 currentUserId,
                 vehicleId
         );
@@ -240,6 +284,12 @@ public class VehicleTrackingSessionService {
             Long currentUserId,
             Long vehicleId
     ) {
+        /*
+         * This is only a read/status operation.
+         *
+         * It intentionally keeps the lightweight membership
+         * check instead of taking the lifecycle write lock.
+         */
         fleetAccessService.requireVehicleMember(
                 currentUserId,
                 vehicleId
@@ -258,8 +308,9 @@ public class VehicleTrackingSessionService {
                         );
 
         /*
-         * A read/status request may repair safe structural metadata,
-         * but it may NEVER recreate lost sequence authority.
+         * A read/status request may inspect and safely repair
+         * structural runtime metadata, but it must never recreate
+         * lost sequence authority.
          */
         requireRuntimeContinuity(
                 session
@@ -341,6 +392,14 @@ public class VehicleTrackingSessionService {
                             reason
                     );
 
+                    /*
+                     * Delete Redis authority while this operation's
+                     * surrounding lifecycle transaction is still
+                     * holding the VehicleMember lock.
+                     *
+                     * deactivateIfMatches protects a newer unrelated
+                     * runtime from an old termination request.
+                     */
                     deactivateRuntime(
                             session
                     );
@@ -390,7 +449,7 @@ public class VehicleTrackingSessionService {
      * new session B -> ACTIVE
      *
      * Old queued observations still contain session A and are
-     * rejected by the Batch 13.11 session-authority check.
+     * rejected by the canonical session-authority check.
      */
     private TrackingSessionResponse rotateSessionAfterRuntimeLoss(
             VehicleTrackingSession existing
@@ -404,12 +463,12 @@ public class VehicleTrackingSessionService {
             /*
              * Flush the old ACTIVE -> ENDED transition first.
              *
-             * This matters because PostgreSQL has partial unique
-             * indexes allowing only one ACTIVE session per:
+             * PostgreSQL has partial unique indexes allowing
+             * only one ACTIVE session per:
              *
-             * vehicle
-             * user
-             * device
+             * - vehicle
+             * - user
+             * - device installation
              */
             trackingSessionRepository
                     .saveAndFlush(
@@ -418,7 +477,9 @@ public class VehicleTrackingSessionService {
 
             /*
              * Delete only if Redis still belongs to the old
-             * session. A newer concurrent runtime must survive.
+             * session.
+             *
+             * A newer concurrent runtime must survive.
              */
             deactivateRuntime(
                     existing
@@ -437,6 +498,10 @@ public class VehicleTrackingSessionService {
                                     replacement
                             );
 
+            /*
+             * Redis runtime is not created until this database
+             * transaction successfully commits.
+             */
             activateNewRuntimeAfterCommit(
                     saved
             );
@@ -482,6 +547,10 @@ public class VehicleTrackingSessionService {
                                     session
                             );
 
+            /*
+             * Do not create runtime authority before the
+             * database transaction commits.
+             */
             activateNewRuntimeAfterCommit(
                     saved
             );
@@ -495,9 +564,9 @@ public class VehicleTrackingSessionService {
             /*
              * Database remains final authority for:
              *
-             * one ACTIVE session per vehicle
-             * one ACTIVE session per user
-             * one ACTIVE session per device
+             * - one ACTIVE session per vehicle
+             * - one ACTIVE session per user
+             * - one ACTIVE session per device
              */
             throw new ConflictException(
                     "Tracking session changed concurrently; retry the request"
@@ -506,7 +575,7 @@ public class VehicleTrackingSessionService {
     }
 
     // =========================================================
-    // RUNTIME
+    // RUNTIME INSPECTION
     // =========================================================
 
     private RuntimeEnsureResult inspectRuntime(
@@ -573,6 +642,12 @@ public class VehicleTrackingSessionService {
     private void activateNewRuntimeAfterCommit(
             VehicleTrackingSession session
     ) {
+        /*
+         * Capture only stable database identity.
+         *
+         * The coordinator will reread the committed tracking
+         * session before establishing Redis authority.
+         */
         Long vehicleId =
                 session
                         .getVehicle()
@@ -586,28 +661,33 @@ public class VehicleTrackingSessionService {
                         .getUser()
                         .getId();
 
-        UUID deviceInstallationId =
-                session.getDeviceInstallationId();
-
-        Instant startedAt =
-                session.getStartedAt();
-
         Runnable activation =
                 () ->
-                        runtimeStore
-                                .activateNewSession(
+                        runtimeActivationCoordinator
+                                .activateIfStillAuthorized(
                                         vehicleId,
                                         sessionId,
-                                        userId,
-                                        deviceInstallationId,
-                                        startedAt
+                                        userId
                                 );
 
         if (TransactionSynchronizationManager
-                .isActualTransactionActive()
-                &&
-                TransactionSynchronizationManager
-                        .isSynchronizationActive()) {
+                .isActualTransactionActive()) {
+
+            /*
+             * A real tracking transaction is expected to have
+             * Spring transaction synchronization available.
+             *
+             * We deliberately do not execute REQUIRES_NEW while
+             * the current transaction still owns the membership
+             * row lock because that could self-block.
+             */
+            if (!TransactionSynchronizationManager
+                    .isSynchronizationActive()) {
+
+                throw new IllegalStateException(
+                        "Tracking transaction has no synchronization support"
+                );
+            }
 
             TransactionSynchronizationManager
                     .registerSynchronization(
@@ -623,6 +703,13 @@ public class VehicleTrackingSessionService {
             return;
         }
 
+        /*
+         * Direct unit tests invoke the service without the
+         * Spring transactional proxy.
+         *
+         * In that environment there is no real surrounding
+         * transaction, so execute immediately.
+         */
         activation.run();
     }
 }

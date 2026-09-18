@@ -9,8 +9,11 @@ import com.mobilityos.fleet.vehicle.VehicleRepository;
 import com.mobilityos.fleet.vehicle.dto.VehicleResponse;
 import com.mobilityos.identity.entity.User;
 import com.mobilityos.identity.repository.UserRepository;
+import com.mobilityos.location.tracking.TrackingSessionEndReason;
+import com.mobilityos.location.tracking.VehicleTrackingSessionService;
 import com.mobilityos.organization.entity.Organization;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import java.lang.reflect.Field;
 import java.time.Instant;
@@ -20,6 +23,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -382,6 +386,69 @@ class VehicleMembershipServiceTest {
         );
     }
 
+    @Test
+    void removingVehicleMemberTerminatesTrackingBeforeDeletingMembership()
+            throws Exception {
+
+        Fixture fixture = fixture();
+
+        User memberUser =
+                user(
+                        2L,
+                        "0922000000"
+                );
+
+        VehicleMember membership =
+                new VehicleMember(
+                        fixture.vehicle,
+                        memberUser
+                );
+
+        when(fixture.vehicleMemberRepository
+                .findByVehicleIdAndUserIdForUpdate(
+                        10L,
+                        2L
+                ))
+                .thenReturn(
+                        Optional.of(
+                                membership
+                        )
+                );
+
+        fixture.service.removeVehicleMember(
+                1L,
+                10L,
+                2L
+        );
+
+        verify(
+                fixture.fleetAccessService
+        ).requireVehicleManager(
+                1L,
+                10L
+        );
+
+        InOrder lifecycleOrder =
+                inOrder(
+                        fixture.trackingSessionService,
+                        fixture.vehicleMemberRepository
+                );
+
+        lifecycleOrder.verify(
+                fixture.trackingSessionService
+        ).terminateActiveSession(
+                10L,
+                2L,
+                TrackingSessionEndReason.MEMBERSHIP_REVOKED
+        );
+
+        lifecycleOrder.verify(
+                fixture.vehicleMemberRepository
+        ).delete(
+                membership
+        );
+    }
+
     // =========================================================
     // FIXTURE
     // =========================================================
@@ -404,6 +471,9 @@ class VehicleMembershipServiceTest {
         FleetAccessService fleetAccessService =
                 mock(FleetAccessService.class);
 
+        VehicleTrackingSessionService trackingSessionService =
+                mock(VehicleTrackingSessionService.class);
+
         /*
          * VehicleMembershipService now owns:
          *
@@ -418,7 +488,8 @@ class VehicleMembershipServiceTest {
                         vehicleMemberRepository,
                         vehicleInvitationRepository,
                         userRepository,
-                        fleetAccessService
+                        fleetAccessService,
+                        trackingSessionService
                 );
 
         User currentUser =
@@ -447,6 +518,7 @@ class VehicleMembershipServiceTest {
                 vehicleInvitationRepository,
                 userRepository,
                 fleetAccessService,
+                trackingSessionService,
                 currentUser,
                 organization,
                 vehicle
@@ -574,6 +646,7 @@ class VehicleMembershipServiceTest {
             VehicleInvitationRepository vehicleInvitationRepository,
             UserRepository userRepository,
             FleetAccessService fleetAccessService,
+            VehicleTrackingSessionService trackingSessionService,
             User currentUser,
             Organization organization,
             Vehicle vehicle

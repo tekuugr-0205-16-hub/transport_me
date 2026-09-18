@@ -12,34 +12,74 @@ import com.mobilityos.fleet.vehicle.VehicleRepository;
 import com.mobilityos.fleet.vehicle.dto.VehicleResponse;
 import com.mobilityos.identity.entity.User;
 import com.mobilityos.identity.repository.UserRepository;
+import com.mobilityos.location.tracking.TrackingSessionEndReason;
+import com.mobilityos.location.tracking.VehicleTrackingSessionService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class VehicleMembershipService {
 
     private final VehicleRepository vehicleRepository;
+
     private final VehicleMemberRepository vehicleMemberRepository;
+
     private final VehicleInvitationRepository vehicleInvitationRepository;
+
     private final UserRepository userRepository;
+
     private final FleetAccessService fleetAccessService;
+
+    private final VehicleTrackingSessionService trackingSessionService;
 
     public VehicleMembershipService(
             VehicleRepository vehicleRepository,
             VehicleMemberRepository vehicleMemberRepository,
             VehicleInvitationRepository vehicleInvitationRepository,
             UserRepository userRepository,
-            FleetAccessService fleetAccessService
+            FleetAccessService fleetAccessService,
+            VehicleTrackingSessionService trackingSessionService
     ) {
-        this.vehicleRepository = vehicleRepository;
-        this.vehicleMemberRepository = vehicleMemberRepository;
-        this.vehicleInvitationRepository = vehicleInvitationRepository;
-        this.userRepository = userRepository;
-        this.fleetAccessService = fleetAccessService;
+        this.vehicleRepository =
+                Objects.requireNonNull(
+                        vehicleRepository,
+                        "vehicleRepository must not be null"
+                );
+
+        this.vehicleMemberRepository =
+                Objects.requireNonNull(
+                        vehicleMemberRepository,
+                        "vehicleMemberRepository must not be null"
+                );
+
+        this.vehicleInvitationRepository =
+                Objects.requireNonNull(
+                        vehicleInvitationRepository,
+                        "vehicleInvitationRepository must not be null"
+                );
+
+        this.userRepository =
+                Objects.requireNonNull(
+                        userRepository,
+                        "userRepository must not be null"
+                );
+
+        this.fleetAccessService =
+                Objects.requireNonNull(
+                        fleetAccessService,
+                        "fleetAccessService must not be null"
+                );
+
+        this.trackingSessionService =
+                Objects.requireNonNull(
+                        trackingSessionService,
+                        "trackingSessionService must not be null"
+                );
     }
 
     // =========================================================
@@ -61,20 +101,29 @@ public class VehicleMembershipService {
                 vehicleId
         );
 
-        Vehicle vehicle = vehicleRepository.findById(vehicleId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Vehicle not found"
-                        )
+        Vehicle vehicle =
+                vehicleRepository
+                        .findById(vehicleId)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Vehicle not found"
+                                )
+                        );
+
+        User inviter =
+                getUser(
+                        currentUserId
                 );
 
-        User inviter = getUser(currentUserId);
-
         /*
-         * If the phone number already belongs to a registered user,
-         * make sure that user is not already assigned to this vehicle.
+         * If the phone number already belongs to a registered
+         * user, make sure that user is not already assigned to
+         * this vehicle.
          */
-        userRepository.findByPhoneNumber(request.phoneNumber())
+        userRepository
+                .findByPhoneNumber(
+                        request.phoneNumber()
+                )
                 .ifPresent(invitedUser -> {
 
                     if (vehicleMemberRepository
@@ -117,13 +166,15 @@ public class VehicleMembershipService {
 
         try {
             /*
-             * Flush immediately so a concurrent duplicate is detected
-             * here and translated into a clean 409 Conflict.
+             * Flush immediately so a concurrent duplicate is
+             * detected here and translated into a clean
+             * application-level conflict.
              */
             VehicleInvitation savedInvitation =
-                    vehicleInvitationRepository.saveAndFlush(
-                            invitation
-                    );
+                    vehicleInvitationRepository
+                            .saveAndFlush(
+                                    invitation
+                            );
 
             return InvitationResponse.from(
                     savedInvitation
@@ -145,7 +196,10 @@ public class VehicleMembershipService {
     public List<InvitationResponse> getPendingInvitationsForUser(
             Long currentUserId
     ) {
-        User currentUser = getUser(currentUserId);
+        User currentUser =
+                getUser(
+                        currentUserId
+                );
 
         return vehicleInvitationRepository
                 .findByInvitedPhoneNumberAndStatusOrderByCreatedAtDesc(
@@ -153,7 +207,9 @@ public class VehicleMembershipService {
                         VehicleInvitation.InvitationStatus.PENDING
                 )
                 .stream()
-                .map(InvitationResponse::from)
+                .map(
+                        InvitationResponse::from
+                )
                 .toList();
     }
 
@@ -172,14 +228,19 @@ public class VehicleMembershipService {
          */
         VehicleInvitation invitation =
                 vehicleInvitationRepository
-                        .findByIdForUpdate(invitationId)
+                        .findByIdForUpdate(
+                                invitationId
+                        )
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Invitation not found"
                                 )
                         );
 
-        User currentUser = getUser(currentUserId);
+        User currentUser =
+                getUser(
+                        currentUserId
+                );
 
         assertInvitationBelongsToUser(
                 invitation,
@@ -187,15 +248,17 @@ public class VehicleMembershipService {
         );
 
         /*
-         * Repeated acceptance is intentionally idempotent
-         * when the corresponding VehicleMember still exists.
+         * Repeated acceptance is intentionally idempotent when
+         * the corresponding VehicleMember still exists.
          */
         if (invitation.getStatus()
                 == VehicleInvitation.InvitationStatus.ACCEPTED) {
 
             if (vehicleMemberRepository
                     .existsByVehicleIdAndUserId(
-                            invitation.getVehicle().getId(),
+                            invitation
+                                    .getVehicle()
+                                    .getId(),
                             currentUserId
                     )) {
 
@@ -205,8 +268,10 @@ public class VehicleMembershipService {
             }
 
             /*
-             * ACCEPTED without membership represents inconsistent
-             * state. Do not silently recreate access.
+             * ACCEPTED without membership represents
+             * inconsistent state.
+             *
+             * Do not silently recreate operational access.
              */
             throw new ConflictException(
                     "Invitation is accepted but vehicle access is missing"
@@ -223,7 +288,9 @@ public class VehicleMembershipService {
 
         if (!vehicleMemberRepository
                 .existsByVehicleIdAndUserId(
-                        invitation.getVehicle().getId(),
+                        invitation
+                                .getVehicle()
+                                .getId(),
                         currentUserId
                 )) {
 
@@ -237,9 +304,14 @@ public class VehicleMembershipService {
                     membership
             );
         }
+
+        /*
+         * Exactly one transition from PENDING -> ACCEPTED.
+         *
+         * The previous duplicate invitation.accept(...) call
+         * has intentionally been removed.
+         */
         invitation.accept(
-                Instant.now()
-        );invitation.accept(
                 Instant.now()
         );
 
@@ -259,14 +331,19 @@ public class VehicleMembershipService {
     ) {
         VehicleInvitation invitation =
                 vehicleInvitationRepository
-                        .findByIdForUpdate(invitationId)
+                        .findByIdForUpdate(
+                                invitationId
+                        )
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Invitation not found"
                                 )
                         );
 
-        User currentUser = getUser(currentUserId);
+        User currentUser =
+                getUser(
+                        currentUserId
+                );
 
         assertInvitationBelongsToUser(
                 invitation,
@@ -320,9 +397,13 @@ public class VehicleMembershipService {
         );
 
         return vehicleMemberRepository
-                .findByVehicleId(vehicleId)
+                .findByVehicleId(
+                        vehicleId
+                )
                 .stream()
-                .map(VehicleMemberResponse::from)
+                .map(
+                        VehicleMemberResponse::from
+                )
                 .toList();
     }
 
@@ -345,9 +426,26 @@ public class VehicleMembershipService {
                 vehicleId
         );
 
+        /*
+         * IMPORTANT:
+         *
+         * Use the same pessimistically locked VehicleMember row
+         * used by tracking start.
+         *
+         * This serializes:
+         *
+         *     startSession()
+         *
+         * against:
+         *
+         *     removeVehicleMember()
+         *
+         * so a tracking session cannot race past membership
+         * revocation.
+         */
         VehicleMember membership =
                 vehicleMemberRepository
-                        .findByVehicleIdAndUserId(
+                        .findByVehicleIdAndUserIdForUpdate(
                                 vehicleId,
                                 memberUserId
                         )
@@ -357,6 +455,37 @@ public class VehicleMembershipService {
                                 )
                         );
 
+        /*
+         * Revoke runtime authority BEFORE deleting membership.
+         *
+         * VehicleTrackingSessionService joins this transaction
+         * because its termination method uses the default
+         * REQUIRED transaction propagation.
+         *
+         * If an ACTIVE session exists:
+         *
+         *     ACTIVE
+         *       ↓
+         *     ENDED
+         *       ↓
+         *     reason = MEMBERSHIP_REVOKED
+         *
+         * and the matching Redis runtime is removed.
+         *
+         * If there is no active session, this is safely a
+         * no-op and membership removal continues.
+         */
+        trackingSessionService.terminateActiveSession(
+                vehicleId,
+                memberUserId,
+                TrackingSessionEndReason.MEMBERSHIP_REVOKED
+        );
+
+        /*
+         * Remove only the vehicle-access relationship.
+         *
+         * The User account itself remains untouched.
+         */
         vehicleMemberRepository.delete(
                 membership
         );
@@ -371,13 +500,15 @@ public class VehicleMembershipService {
             Long currentUserId
     ) {
         /*
-         * This returns vehicles where the current user is
+         * Return only vehicles where the current user is
          * explicitly a VehicleMember.
          *
-         * It is NOT the organization's full fleet.
+         * This is NOT the organization's complete fleet.
          */
         return vehicleMemberRepository
-                .findByUserId(currentUserId)
+                .findByUserId(
+                        currentUserId
+                )
                 .stream()
                 .map(member ->
                         VehicleResponse.from(
@@ -391,8 +522,13 @@ public class VehicleMembershipService {
     // PRIVATE HELPERS
     // =========================================================
 
-    private User getUser(Long userId) {
-        return userRepository.findById(userId)
+    private User getUser(
+            Long userId
+    ) {
+        return userRepository
+                .findById(
+                        userId
+                )
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "User not found"
@@ -404,8 +540,11 @@ public class VehicleMembershipService {
             VehicleInvitation invitation,
             User currentUser
     ) {
-        if (!currentUser.getPhoneNumber()
-                .equals(invitation.getInvitedPhoneNumber())) {
+        if (!currentUser
+                .getPhoneNumber()
+                .equals(
+                        invitation.getInvitedPhoneNumber()
+                )) {
 
             throw new ForbiddenException(
                     "This invitation was not addressed to your account"

@@ -130,13 +130,18 @@ class VehicleTrackingSessionServiceTest {
         );
 
         verify(
-                fixture.runtimeStore
-        ).activateNewSession(
-                eq(10L),
-                eq(response.sessionId()),
-                eq(1L),
-                eq(DEVICE_A),
-                any(Instant.class)
+                fixture.fleetAccessService
+        ).requireVehicleMemberForUpdate(
+                1L,
+                10L
+        );
+
+        verify(
+                fixture.runtimeActivationCoordinator
+        ).activateIfStillAuthorized(
+                10L,
+                response.sessionId(),
+                1L
         );
     }
 
@@ -351,13 +356,11 @@ class VehicleTrackingSessionServiceTest {
         );
 
         verify(
-                fixture.runtimeStore
-        ).activateNewSession(
-                eq(10L),
-                eq(response.sessionId()),
-                eq(1L),
-                eq(DEVICE_A),
-                any(Instant.class)
+                fixture.runtimeActivationCoordinator
+        ).activateIfStillAuthorized(
+                10L,
+                response.sessionId(),
+                1L
         );
     }
 
@@ -830,14 +833,12 @@ class VehicleTrackingSessionServiceTest {
         );
 
         verify(
-                fixture.runtimeStore,
+                fixture.runtimeActivationCoordinator,
                 never()
-        ).activateNewSession(
+        ).activateIfStillAuthorized(
                 anyLong(),
                 any(UUID.class),
-                anyLong(),
-                any(UUID.class),
-                any(Instant.class)
+                anyLong()
         );
 
         verify(
@@ -905,14 +906,12 @@ class VehicleTrackingSessionServiceTest {
         );
 
         verify(
-                fixture.runtimeStore,
+                fixture.runtimeActivationCoordinator,
                 never()
-        ).activateNewSession(
+        ).activateIfStillAuthorized(
                 anyLong(),
                 any(UUID.class),
-                anyLong(),
-                any(UUID.class),
-                any(Instant.class)
+                anyLong()
         );
     }
 
@@ -1104,13 +1103,19 @@ class VehicleTrackingSessionServiceTest {
                         VehicleTrackingRuntimeStore.class
                 );
 
+        TrackingRuntimeActivationCoordinator runtimeActivationCoordinator =
+                mock(
+                        TrackingRuntimeActivationCoordinator.class
+                );
+
         VehicleTrackingSessionService service =
                 new VehicleTrackingSessionService(
                         trackingSessionRepository,
                         vehicleRepository,
                         userRepository,
                         fleetAccessService,
-                        runtimeStore
+                        runtimeStore,
+                        runtimeActivationCoordinator
                 );
 
         User user =
@@ -1139,6 +1144,7 @@ class VehicleTrackingSessionServiceTest {
                 userRepository,
                 fleetAccessService,
                 runtimeStore,
+                runtimeActivationCoordinator,
                 user,
                 organization,
                 vehicle
@@ -1254,6 +1260,8 @@ class VehicleTrackingSessionServiceTest {
             FleetAccessService fleetAccessService,
 
             VehicleTrackingRuntimeStore runtimeStore,
+
+            TrackingRuntimeActivationCoordinator runtimeActivationCoordinator,
 
             User user,
 
