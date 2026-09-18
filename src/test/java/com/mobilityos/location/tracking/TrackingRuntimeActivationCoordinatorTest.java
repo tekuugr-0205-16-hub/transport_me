@@ -3,6 +3,7 @@ package com.mobilityos.location.tracking;
 import com.mobilityos.fleet.membership.VehicleMember;
 import com.mobilityos.fleet.membership.VehicleMemberRepository;
 import com.mobilityos.fleet.vehicle.Vehicle;
+import com.mobilityos.fleet.vehicle.VehicleRepository;
 import com.mobilityos.identity.entity.User;
 import com.mobilityos.location.tracking.runtime.VehicleTrackingRuntimeStore;
 import com.mobilityos.organization.entity.Organization;
@@ -32,7 +33,7 @@ class TrackingRuntimeActivationCoordinatorTest {
     // =========================================================
 
     @Test
-    void activatesRuntimeOnlyAfterMembershipAndSessionAreValidated()
+    void activatesRuntimeOnlyAfterMembershipVehicleAndSessionAreValidated()
             throws Exception {
 
         Fixture fixture = fixture();
@@ -61,6 +62,16 @@ class TrackingRuntimeActivationCoordinatorTest {
                         )
                 );
 
+        when(fixture.vehicleRepository
+                .findByIdForUpdate(
+                        VEHICLE_ID
+                ))
+                .thenReturn(
+                        Optional.of(
+                                fixture.vehicle
+                        )
+                );
+
         when(fixture.trackingSessionRepository
                 .findByIdAndVehicleIdAndUserId(
                         session.getId(),
@@ -79,16 +90,10 @@ class TrackingRuntimeActivationCoordinatorTest {
                 USER_ID
         );
 
-        /*
-         * Important ordering:
-         *
-         * 1. lock/check VehicleMember
-         * 2. reread committed tracking session
-         * 3. establish Redis authority
-         */
         InOrder order =
                 inOrder(
                         fixture.vehicleMemberRepository,
+                        fixture.vehicleRepository,
                         fixture.trackingSessionRepository,
                         fixture.runtimeStore
                 );
@@ -98,6 +103,12 @@ class TrackingRuntimeActivationCoordinatorTest {
         ).findByVehicleIdAndUserIdForUpdate(
                 VEHICLE_ID,
                 USER_ID
+        );
+
+        order.verify(
+                fixture.vehicleRepository
+        ).findByIdForUpdate(
+                VEHICLE_ID
         );
 
         order.verify(
@@ -154,10 +165,119 @@ class TrackingRuntimeActivationCoordinatorTest {
                 USER_ID
         );
 
-        /*
-         * Once membership is gone, do not even inspect the
-         * tracking session and never establish Redis authority.
-         */
+        verifyNoInteractions(
+                fixture.vehicleRepository,
+                fixture.trackingSessionRepository,
+                fixture.runtimeStore
+        );
+    }
+
+    // =========================================================
+    // VEHICLE DISAPPEARED
+    // =========================================================
+
+    @Test
+    void doesNotActivateWhenVehicleNoLongerExists()
+            throws Exception {
+
+        Fixture fixture = fixture();
+
+        VehicleMember membership =
+                new VehicleMember(
+                        fixture.vehicle,
+                        fixture.user
+                );
+
+        UUID sessionId =
+                UUID.randomUUID();
+
+        when(fixture.vehicleMemberRepository
+                .findByVehicleIdAndUserIdForUpdate(
+                        VEHICLE_ID,
+                        USER_ID
+                ))
+                .thenReturn(
+                        Optional.of(
+                                membership
+                        )
+                );
+
+        when(fixture.vehicleRepository
+                .findByIdForUpdate(
+                        VEHICLE_ID
+                ))
+                .thenReturn(
+                        Optional.empty()
+                );
+
+        fixture.coordinator.activateIfStillAuthorized(
+                VEHICLE_ID,
+                sessionId,
+                USER_ID
+        );
+
+        verifyNoInteractions(
+                fixture.trackingSessionRepository,
+                fixture.runtimeStore
+        );
+    }
+
+    // =========================================================
+    // VEHICLE DEACTIVATED
+    // =========================================================
+
+    @Test
+    void doesNotActivateWhenVehicleWasDeactivated()
+            throws Exception {
+
+        Fixture fixture = fixture();
+
+        fixture.vehicle.setStatus(
+                Vehicle.VehicleStatus.INACTIVE
+        );
+
+        VehicleMember membership =
+                new VehicleMember(
+                        fixture.vehicle,
+                        fixture.user
+                );
+
+        UUID sessionId =
+                UUID.randomUUID();
+
+        when(fixture.vehicleMemberRepository
+                .findByVehicleIdAndUserIdForUpdate(
+                        VEHICLE_ID,
+                        USER_ID
+                ))
+                .thenReturn(
+                        Optional.of(
+                                membership
+                        )
+                );
+
+        when(fixture.vehicleRepository
+                .findByIdForUpdate(
+                        VEHICLE_ID
+                ))
+                .thenReturn(
+                        Optional.of(
+                                fixture.vehicle
+                        )
+                );
+
+        fixture.coordinator.activateIfStillAuthorized(
+                VEHICLE_ID,
+                sessionId,
+                USER_ID
+        );
+
+        verify(
+                fixture.vehicleRepository
+        ).findByIdForUpdate(
+                VEHICLE_ID
+        );
+
         verifyNoInteractions(
                 fixture.trackingSessionRepository,
                 fixture.runtimeStore
@@ -191,6 +311,16 @@ class TrackingRuntimeActivationCoordinatorTest {
                 .thenReturn(
                         Optional.of(
                                 membership
+                        )
+                );
+
+        when(fixture.vehicleRepository
+                .findByIdForUpdate(
+                        VEHICLE_ID
+                ))
+                .thenReturn(
+                        Optional.of(
+                                fixture.vehicle
                         )
                 );
 
@@ -246,14 +376,9 @@ class TrackingRuntimeActivationCoordinatorTest {
                         DEVICE_ID
                 );
 
-        /*
-         * Simulates revocation / timeout / administrative end
-         * happening after the original start transaction committed
-         * but before this delayed activation reaches Redis.
-         */
         session.end(
                 Instant.now(),
-                TrackingSessionEndReason.MEMBERSHIP_REVOKED
+                TrackingSessionEndReason.VEHICLE_DEACTIVATED
         );
 
         when(fixture.vehicleMemberRepository
@@ -264,6 +389,16 @@ class TrackingRuntimeActivationCoordinatorTest {
                 .thenReturn(
                         Optional.of(
                                 membership
+                        )
+                );
+
+        when(fixture.vehicleRepository
+                .findByIdForUpdate(
+                        VEHICLE_ID
+                ))
+                .thenReturn(
+                        Optional.of(
+                                fixture.vehicle
                         )
                 );
 
@@ -285,14 +420,6 @@ class TrackingRuntimeActivationCoordinatorTest {
                 USER_ID
         );
 
-        verify(
-                fixture.trackingSessionRepository
-        ).findByIdAndVehicleIdAndUserId(
-                session.getId(),
-                VEHICLE_ID,
-                USER_ID
-        );
-
         verifyNoInteractions(
                 fixture.runtimeStore
         );
@@ -310,6 +437,11 @@ class TrackingRuntimeActivationCoordinatorTest {
                         VehicleMemberRepository.class
                 );
 
+        VehicleRepository vehicleRepository =
+                mock(
+                        VehicleRepository.class
+                );
+
         VehicleTrackingSessionRepository trackingSessionRepository =
                 mock(
                         VehicleTrackingSessionRepository.class
@@ -323,6 +455,7 @@ class TrackingRuntimeActivationCoordinatorTest {
         TrackingRuntimeActivationCoordinator coordinator =
                 new TrackingRuntimeActivationCoordinator(
                         vehicleMemberRepository,
+                        vehicleRepository,
                         trackingSessionRepository,
                         runtimeStore
                 );
@@ -349,6 +482,7 @@ class TrackingRuntimeActivationCoordinatorTest {
         return new Fixture(
                 coordinator,
                 vehicleMemberRepository,
+                vehicleRepository,
                 trackingSessionRepository,
                 runtimeStore,
                 user,
@@ -458,6 +592,8 @@ class TrackingRuntimeActivationCoordinatorTest {
             TrackingRuntimeActivationCoordinator coordinator,
 
             VehicleMemberRepository vehicleMemberRepository,
+
+            VehicleRepository vehicleRepository,
 
             VehicleTrackingSessionRepository trackingSessionRepository,
 

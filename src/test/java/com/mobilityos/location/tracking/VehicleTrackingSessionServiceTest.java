@@ -44,7 +44,7 @@ class VehicleTrackingSessionServiceTest {
 
         Fixture fixture = fixture();
 
-        when(fixture.vehicleRepository.findById(10L))
+        when(fixture.vehicleRepository.findByIdForUpdate(10L))
                 .thenReturn(
                         Optional.of(
                                 fixture.vehicle
@@ -145,6 +145,60 @@ class VehicleTrackingSessionServiceTest {
         );
     }
 
+
+    // =========================================================
+    // NON-ACTIVE VEHICLE
+    // =========================================================
+
+    @Test
+    void nonActiveVehicleCannotStartTracking()
+            throws Exception {
+
+        Fixture fixture = fixture();
+
+        fixture.vehicle.setStatus(
+                Vehicle.VehicleStatus.INACTIVE
+        );
+
+        when(fixture.vehicleRepository
+                .findByIdForUpdate(10L))
+                .thenReturn(
+                        Optional.of(
+                                fixture.vehicle
+                        )
+                );
+
+        assertThrows(
+                ConflictException.class,
+                () ->
+                        fixture.service.startSession(
+                                1L,
+                                10L,
+                                DEVICE_A
+                        )
+        );
+
+        verify(
+                fixture.fleetAccessService
+        ).requireVehicleMemberForUpdate(
+                1L,
+                10L
+        );
+
+        verify(
+                fixture.vehicleRepository
+        ).findByIdForUpdate(
+                10L
+        );
+
+        verifyNoInteractions(
+                fixture.trackingSessionRepository,
+                fixture.userRepository,
+                fixture.runtimeStore,
+                fixture.runtimeActivationCoordinator
+        );
+    }
+
     // =========================================================
     // SAME DEVICE RESUME
     // =========================================================
@@ -161,7 +215,7 @@ class VehicleTrackingSessionServiceTest {
                         DEVICE_A
                 );
 
-        when(fixture.vehicleRepository.findById(10L))
+        when(fixture.vehicleRepository.findByIdForUpdate(10L))
                 .thenReturn(
                         Optional.of(
                                 fixture.vehicle
@@ -240,7 +294,7 @@ class VehicleTrackingSessionServiceTest {
         UUID oldSessionId =
                 existing.getId();
 
-        when(fixture.vehicleRepository.findById(10L))
+        when(fixture.vehicleRepository.findByIdForUpdate(10L))
                 .thenReturn(
                         Optional.of(
                                 fixture.vehicle
@@ -380,7 +434,7 @@ class VehicleTrackingSessionServiceTest {
                         DEVICE_A
                 );
 
-        when(fixture.vehicleRepository.findById(10L))
+        when(fixture.vehicleRepository.findByIdForUpdate(10L))
                 .thenReturn(
                         Optional.of(
                                 fixture.vehicle
@@ -443,7 +497,7 @@ class VehicleTrackingSessionServiceTest {
                         DEVICE_B
                 );
 
-        when(fixture.vehicleRepository.findById(10L))
+        when(fixture.vehicleRepository.findByIdForUpdate(10L))
                 .thenReturn(
                         Optional.of(
                                 fixture.vehicle
@@ -500,7 +554,7 @@ class VehicleTrackingSessionServiceTest {
                         DEVICE_A
                 );
 
-        when(fixture.vehicleRepository.findById(10L))
+        when(fixture.vehicleRepository.findByIdForUpdate(10L))
                 .thenReturn(
                         Optional.of(
                                 fixture.vehicle
@@ -572,7 +626,7 @@ class VehicleTrackingSessionServiceTest {
                         DEVICE_A
                 );
 
-        when(fixture.vehicleRepository.findById(10L))
+        when(fixture.vehicleRepository.findByIdForUpdate(10L))
                 .thenReturn(
                         Optional.of(
                                 fixture.vehicle
@@ -640,7 +694,7 @@ class VehicleTrackingSessionServiceTest {
 
         Fixture fixture = fixture();
 
-        when(fixture.vehicleRepository.findById(10L))
+        when(fixture.vehicleRepository.findByIdForUpdate(10L))
                 .thenReturn(
                         Optional.of(
                                 fixture.vehicle
@@ -865,7 +919,7 @@ class VehicleTrackingSessionServiceTest {
                         DEVICE_A
                 );
 
-        when(fixture.vehicleRepository.findById(10L))
+        when(fixture.vehicleRepository.findByIdForUpdate(10L))
                 .thenReturn(
                         Optional.of(
                                 fixture.vehicle
@@ -1041,6 +1095,61 @@ class VehicleTrackingSessionServiceTest {
 
         assertEquals(
                 TrackingSessionEndReason.MEMBERSHIP_REVOKED,
+                existing.getEndReason()
+        );
+
+        assertNotNull(
+                existing.getEndedAt()
+        );
+
+        verify(
+                fixture.runtimeStore
+        ).deactivateIfMatches(
+                10L,
+                existing.getId()
+        );
+    }
+
+
+    // =========================================================
+    // VEHICLE-WIDE TERMINATION
+    // =========================================================
+
+    @Test
+    void vehicleDeactivationEndsAndInvalidatesActiveSession()
+            throws Exception {
+
+        Fixture fixture = fixture();
+
+        VehicleTrackingSession existing =
+                session(
+                        fixture,
+                        DEVICE_A
+                );
+
+        when(fixture.trackingSessionRepository
+                .findByVehicleIdAndStatus(
+                        10L,
+                        TrackingSessionStatus.ACTIVE
+                ))
+                .thenReturn(
+                        Optional.of(
+                                existing
+                        )
+                );
+
+        fixture.service.terminateActiveSessionForVehicle(
+                10L,
+                TrackingSessionEndReason.VEHICLE_DEACTIVATED
+        );
+
+        assertEquals(
+                TrackingSessionStatus.ENDED,
+                existing.getStatus()
+        );
+
+        assertEquals(
+                TrackingSessionEndReason.VEHICLE_DEACTIVATED,
                 existing.getEndReason()
         );
 

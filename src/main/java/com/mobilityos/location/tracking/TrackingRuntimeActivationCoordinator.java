@@ -1,6 +1,8 @@
 package com.mobilityos.location.tracking;
 
 import com.mobilityos.fleet.membership.VehicleMemberRepository;
+import com.mobilityos.fleet.vehicle.Vehicle;
+import com.mobilityos.fleet.vehicle.VehicleRepository;
 import com.mobilityos.location.tracking.runtime.VehicleTrackingRuntimeStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -12,15 +14,21 @@ import java.util.UUID;
 @Service
 public class TrackingRuntimeActivationCoordinator {
 
-    private final VehicleMemberRepository vehicleMemberRepository;
+    private final VehicleMemberRepository
+            vehicleMemberRepository;
+
+    private final VehicleRepository
+            vehicleRepository;
 
     private final VehicleTrackingSessionRepository
             trackingSessionRepository;
 
-    private final VehicleTrackingRuntimeStore runtimeStore;
+    private final VehicleTrackingRuntimeStore
+            runtimeStore;
 
     public TrackingRuntimeActivationCoordinator(
             VehicleMemberRepository vehicleMemberRepository,
+            VehicleRepository vehicleRepository,
             VehicleTrackingSessionRepository trackingSessionRepository,
             VehicleTrackingRuntimeStore runtimeStore
     ) {
@@ -28,6 +36,12 @@ public class TrackingRuntimeActivationCoordinator {
                 Objects.requireNonNull(
                         vehicleMemberRepository,
                         "vehicleMemberRepository must not be null"
+                );
+
+        this.vehicleRepository =
+                Objects.requireNonNull(
+                        vehicleRepository,
+                        "vehicleRepository must not be null"
                 );
 
         this.trackingSessionRepository =
@@ -43,18 +57,10 @@ public class TrackingRuntimeActivationCoordinator {
                 );
     }
 
-    /*
-     * This runs after the original tracking-session transaction
-     * has committed.
-     *
-     * REQUIRES_NEW is deliberate:
-     *
-     * - obtain a fresh database transaction
-     * - reacquire the VehicleMember lock
-     * - verify authorization still exists
-     * - verify the DB tracking session is still ACTIVE
-     * - only then establish Redis runtime authority
-     */
+    // =========================================================
+    // AFTER-COMMIT AUTHORITY ESTABLISHMENT
+    // =========================================================
+
     @Transactional(
             propagation = Propagation.REQUIRES_NEW
     )
@@ -79,13 +85,11 @@ public class TrackingRuntimeActivationCoordinator {
         );
 
         /*
-         * Reacquire exactly the same row lock used by:
+         * Reacquire the VehicleMember lifecycle lock.
          *
-         * - tracking start
-         * - membership revocation
-         *
-         * If membership was revoked after the original tracking
-         * transaction committed, activation stops here.
+         * If membership was revoked while the original tracking
+         * transaction was committing, do not recreate Redis
+         * authority.
          */
         if (vehicleMemberRepository
                 .findByVehicleIdAndUserIdForUpdate(
@@ -97,6 +101,32 @@ public class TrackingRuntimeActivationCoordinator {
             return;
         }
 
+        /*
+         * Reacquire the vehicle lifecycle lock too.
+         *
+         * This serializes delayed runtime activation against
+         * vehicle deactivation.
+         */
+        Vehicle vehicle =
+                vehicleRepository
+                        .findByIdForUpdate(
+                                vehicleId
+                        )
+                        .orElse(null);
+
+        if (vehicle == null
+                || !vehicle.isActive()) {
+
+            return;
+        }
+
+        /*
+         * Reread the committed session.
+         *
+         * A session may have been ended after its creation
+         * transaction committed but before this callback obtained
+         * lifecycle authority.
+         */
         VehicleTrackingSession session =
                 trackingSessionRepository
                         .findByIdAndVehicleIdAndUserId(
@@ -106,10 +136,6 @@ public class TrackingRuntimeActivationCoordinator {
                         )
                         .orElse(null);
 
-        /*
-         * The session may have been ended while the after-commit
-         * callback was waiting for the membership lock.
-         */
         if (session == null
                 || session.getStatus()
                 != TrackingSessionStatus.ACTIVE) {
@@ -118,11 +144,11 @@ public class TrackingRuntimeActivationCoordinator {
         }
 
         /*
-         * Use the DB values we just reread instead of values
-         * captured before commit.
+         * Redis activation happens while the database lifecycle
+         * locks remain held.
          *
-         * This also avoids timestamp precision assumptions
-         * between Java Instant and PostgreSQL timestamptz.
+         * Therefore vehicle deactivation or membership revocation
+         * cannot pass this point and leave stale authority behind.
          */
         runtimeStore.activateNewSession(
                 vehicleId,

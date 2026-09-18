@@ -1,6 +1,7 @@
 package com.mobilityos.fleet.vehicle;
 
 import com.mobilityos.fleet.vehicle.dto.CreateVehicleRequest;
+import com.mobilityos.fleet.vehicle.dto.UpdateVehicleStatusRequest;
 import com.mobilityos.fleet.vehicle.dto.VehicleResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -39,8 +40,12 @@ public class OrganizationVehicleController {
                 );
 
         return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(response);
+                .status(
+                        HttpStatus.CREATED
+                )
+                .body(
+                        response
+                );
     }
 
     // =========================================================
@@ -53,13 +58,38 @@ public class OrganizationVehicleController {
             @PathVariable Long organizationId
     ) {
         List<VehicleResponse> vehicles =
-                vehicleService.getVehiclesForOrganization(
-                        currentUserId(),
-                        organizationId
-                );
+                vehicleService
+                        .getVehiclesForOrganization(
+                                currentUserId(),
+                                organizationId
+                        );
 
         return ResponseEntity.ok(
                 vehicles
+        );
+    }
+
+    // =========================================================
+    // UPDATE VEHICLE STATUS
+    // =========================================================
+
+    @PatchMapping("/{vehicleId}/status")
+    public ResponseEntity<VehicleResponse> updateVehicleStatus(
+            @PathVariable Long organizationId,
+            @PathVariable Long vehicleId,
+            @Valid @RequestBody UpdateVehicleStatusRequest request
+    ) {
+        VehicleResponse response =
+                vehicleService
+                        .updateVehicleStatus(
+                                currentUserId(),
+                                organizationId,
+                                vehicleId,
+                                request
+                        );
+
+        return ResponseEntity.ok(
+                response
         );
     }
 
