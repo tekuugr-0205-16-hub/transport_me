@@ -11,6 +11,7 @@ import javax.crypto.SecretKey;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.Optional;
 
 /**
  * Creates and validates JWT access/refresh tokens.
@@ -26,86 +27,267 @@ import java.util.Base64;
 @EnableConfigurationProperties(JwtProperties.class)
 public class JwtService {
 
-    private static final String TOKEN_TYPE_CLAIM = "tokenType";
+    private static final String TOKEN_TYPE_CLAIM =
+            "tokenType";
+
+    private static final String PHONE_NUMBER_CLAIM =
+            "phoneNumber";
 
     private final JwtProperties properties;
     private final SecretKey signingKey;
 
-    public JwtService(JwtProperties properties) {
+    public JwtService(
+            JwtProperties properties
+    ) {
         this.properties = properties;
-        this.signingKey = Keys.hmacShaKeyFor(
-                Base64.getDecoder().decode(properties.getSecret())
-        );
+
+        this.signingKey =
+                Keys.hmacShaKeyFor(
+                        Base64.getDecoder().decode(
+                                properties.getSecret()
+                        )
+                );
     }
 
-    public String generateAccessToken(JwtClaims claims) {
-        Instant now = Instant.now();
-        Instant expiry = now.plus(properties.getAccessTokenExpirationMinutes(), ChronoUnit.MINUTES);
+    public String generateAccessToken(
+            JwtClaims claims
+    ) {
+        Instant now =
+                Instant.now();
+
+        Instant expiry =
+                now.plus(
+                        properties
+                                .getAccessTokenExpirationMinutes(),
+                        ChronoUnit.MINUTES
+                );
 
         return Jwts.builder()
-                .subject(String.valueOf(claims.userId()))
-                .claim("phoneNumber", claims.phoneNumber())
-                .claim(TOKEN_TYPE_CLAIM, JwtTokenType.ACCESS.name())
-                .issuedAt(java.util.Date.from(now))
-                .expiration(java.util.Date.from(expiry))
-                .signWith(signingKey)
+                .subject(
+                        String.valueOf(
+                                claims.userId()
+                        )
+                )
+                .claim(
+                        PHONE_NUMBER_CLAIM,
+                        claims.phoneNumber()
+                )
+                .claim(
+                        TOKEN_TYPE_CLAIM,
+                        JwtTokenType.ACCESS.name()
+                )
+                .issuedAt(
+                        java.util.Date.from(
+                                now
+                        )
+                )
+                .expiration(
+                        java.util.Date.from(
+                                expiry
+                        )
+                )
+                .signWith(
+                        signingKey
+                )
                 .compact();
     }
 
-    public String generateRefreshToken(Long userId) {
-        Instant now = Instant.now();
-        Instant expiry = now.plus(properties.getRefreshTokenExpirationDays(), ChronoUnit.DAYS);
+    public String generateRefreshToken(
+            Long userId
+    ) {
+        Instant now =
+                Instant.now();
+
+        Instant expiry =
+                now.plus(
+                        properties
+                                .getRefreshTokenExpirationDays(),
+                        ChronoUnit.DAYS
+                );
 
         return Jwts.builder()
-                .subject(String.valueOf(userId))
-                .claim(TOKEN_TYPE_CLAIM, JwtTokenType.REFRESH.name())
-                .issuedAt(java.util.Date.from(now))
-                .expiration(java.util.Date.from(expiry))
-                .signWith(signingKey)
+                .subject(
+                        String.valueOf(
+                                userId
+                        )
+                )
+                .claim(
+                        TOKEN_TYPE_CLAIM,
+                        JwtTokenType.REFRESH.name()
+                )
+                .issuedAt(
+                        java.util.Date.from(
+                                now
+                        )
+                )
+                .expiration(
+                        java.util.Date.from(
+                                expiry
+                        )
+                )
+                .signWith(
+                        signingKey
+                )
                 .compact();
     }
 
-    public JwtClaims parseAccessToken(String token) {
-        Claims claims = parseTokenOfType(token, JwtTokenType.ACCESS);
+    /*
+     * Throwing parsers remain available for trusted internal
+     * callers such as the WebSocket authentication interceptor.
+     */
+    public JwtClaims parseAccessToken(
+            String token
+    ) {
+        Claims claims =
+                parseTokenOfType(
+                        token,
+                        JwtTokenType.ACCESS
+                );
 
-        return new JwtClaims(
-                Long.valueOf(claims.getSubject()),
-                claims.get("phoneNumber", String.class)
+        return accessClaimsFrom(
+                claims
         );
     }
 
-    public Long parseUserIdFromRefreshToken(String token) {
-        Claims claims = parseTokenOfType(token, JwtTokenType.REFRESH);
-        return Long.valueOf(claims.getSubject());
+    public Long parseUserIdFromRefreshToken(
+            String token
+    ) {
+        Claims claims =
+                parseTokenOfType(
+                        token,
+                        JwtTokenType.REFRESH
+                );
+
+        return userIdFrom(
+                claims
+        );
     }
 
-    public boolean isAccessTokenValid(String token) {
-        return isTokenValidForType(token, JwtTokenType.ACCESS);
-    }
-
-    public boolean isRefreshTokenValid(String token) {
-        return isTokenValidForType(token, JwtTokenType.REFRESH);
-    }
-
-    private boolean isTokenValidForType(String token, JwtTokenType expectedType) {
+    /*
+     * Safe single-pass parsers for request-boundary code.
+     *
+     * Each method verifies and parses the JWT only once.
+     */
+    public Optional<JwtClaims> tryParseAccessToken(
+            String token
+    ) {
         try {
-            parseTokenOfType(token, expectedType);
-            return true;
-        } catch (JwtException | IllegalArgumentException e) {
-            return false;
+            Claims claims =
+                    parseTokenOfType(
+                            token,
+                            JwtTokenType.ACCESS
+                    );
+
+            return Optional.of(
+                    accessClaimsFrom(
+                            claims
+                    )
+            );
+        } catch (
+                JwtException
+                | IllegalArgumentException exception
+        ) {
+            return Optional.empty();
         }
     }
 
-    private Claims parseTokenOfType(String token, JwtTokenType expectedType) {
-        Claims claims = Jwts.parser()
-                .verifyWith(signingKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+    public Optional<Long> tryParseRefreshTokenUserId(
+            String token
+    ) {
+        try {
+            Claims claims =
+                    parseTokenOfType(
+                            token,
+                            JwtTokenType.REFRESH
+                    );
 
-        String actualType = claims.get(TOKEN_TYPE_CLAIM, String.class);
-        if (!expectedType.name().equals(actualType)) {
-            throw new IllegalArgumentException("Invalid JWT token type");
+            return Optional.of(
+                    userIdFrom(
+                            claims
+                    )
+            );
+        } catch (
+                JwtException
+                | IllegalArgumentException exception
+        ) {
+            return Optional.empty();
+        }
+    }
+
+    /*
+     * Kept for compatibility with existing callers/tests.
+     *
+     * New request-boundary code should prefer the tryParse...
+     * methods when it needs both validation and claims.
+     */
+    public boolean isAccessTokenValid(
+            String token
+    ) {
+        return tryParseAccessToken(
+                token
+        ).isPresent();
+    }
+
+    public boolean isRefreshTokenValid(
+            String token
+    ) {
+        return tryParseRefreshTokenUserId(
+                token
+        ).isPresent();
+    }
+
+    private JwtClaims accessClaimsFrom(
+            Claims claims
+    ) {
+        return new JwtClaims(
+                userIdFrom(
+                        claims
+                ),
+                claims.get(
+                        PHONE_NUMBER_CLAIM,
+                        String.class
+                )
+        );
+    }
+
+    private Long userIdFrom(
+            Claims claims
+    ) {
+        return Long.valueOf(
+                claims.getSubject()
+        );
+    }
+
+    private Claims parseTokenOfType(
+            String token,
+            JwtTokenType expectedType
+    ) {
+        Claims claims =
+                Jwts.parser()
+                        .verifyWith(
+                                signingKey
+                        )
+                        .build()
+                        .parseSignedClaims(
+                                token
+                        )
+                        .getPayload();
+
+        String actualType =
+                claims.get(
+                        TOKEN_TYPE_CLAIM,
+                        String.class
+                );
+
+        if (!expectedType
+                .name()
+                .equals(
+                        actualType
+                )) {
+
+            throw new IllegalArgumentException(
+                    "Invalid JWT token type"
+            );
         }
 
         return claims;
